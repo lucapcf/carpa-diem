@@ -4,18 +4,16 @@
             "name": "Linux",
             "browse": {
                 "path": [
-                    "${workspaceFolder}",
-                    "${workspaceFolder}/Laboratorio_5_Codigo_Fonte/*"
+                    "${workspaceFolder}"
                 ],
                 "limitSymbolsToIncludedHeaders": true
             },
             "includePath": [
-                "${workspaceFolder}",
-                "${workspaceFolder}/include"
+                "${workspaceFolder}/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",
-            "cStandard": "c11",
+            "cStandard": "c17",
             "cppStandard": "c++17",
             "intelliSenseMode": "clang-x64"
         }
