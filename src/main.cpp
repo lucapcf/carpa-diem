@@ -49,6 +49,9 @@
 #include "utils.h"
 #include "matrices.h"
 
+#define M_PI   3.14159265358979323846
+#define M_PI_2 1.57079632679489661923
+
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
 struct ObjModel
@@ -108,10 +111,6 @@ struct ObjModel
 };
 
 
-// Declaração de funções utilizadas para pilha de matrizes de modelagem.
-void PushMatrix(glm::mat4 M);
-void PopMatrix(glm::mat4& M);
-
 // Declaração de várias funções utilizadas em main().  Essas estão definidas
 // logo após a definição de main() neste arquivo.
 void BuildTrianglesAndAddToVirtualScene(ObjModel*); // Constrói representação de um ObjModel como malha de triângulos para renderização
@@ -131,17 +130,9 @@ void TextRendering_Init();
 float TextRendering_LineHeight(GLFWwindow* window);
 float TextRendering_CharWidth(GLFWwindow* window);
 void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrix(GLFWwindow* window, glm::mat4 M, float x, float y, float scale = 1.0f);
-void TextRendering_PrintVector(GLFWwindow* window, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProduct(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProductMoreDigits(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
-void TextRendering_PrintMatrixVectorProductDivW(GLFWwindow* window, glm::mat4 M, glm::vec4 v, float x, float y, float scale = 1.0f);
 
 // Funções abaixo renderizam como texto na janela OpenGL algumas matrizes e
 // outras informações do programa. Definidas após main().
-void TextRendering_ShowModelViewProjection(GLFWwindow* window, glm::mat4 projection, glm::mat4 view, glm::mat4 model, glm::vec4 p_model);
-void TextRendering_ShowEulerAngles(GLFWwindow* window);
-void TextRendering_ShowProjection(GLFWwindow* window);
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
 
 // Funções callback para comunicação com o sistema operacional e interação do
@@ -174,16 +165,8 @@ struct SceneObject
 // estes são acessados.
 std::map<std::string, SceneObject> g_VirtualScene;
 
-// Pilha que guardará as matrizes de modelagem.
-std::stack<glm::mat4>  g_MatrixStack;
-
 // Razão de proporção da janela (largura/altura). Veja função FramebufferSizeCallback().
 float g_ScreenRatio = 1.0f;
-
-// Ângulos de Euler que controlam a rotação de um dos cubos da cena virtual
-float g_AngleX = 0.0f;
-float g_AngleY = 0.0f;
-float g_AngleZ = 0.0f;
 
 // "g_LeftMouseButtonPressed = true" se o usuário está com o botão esquerdo do mouse
 // pressionado no momento atual. Veja função MouseButtonCallback().
@@ -199,17 +182,6 @@ float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
 float g_CameraDistance = 3.5f; // Distância da câmera para a origem
 
-// Variáveis que controlam rotação do antebraço
-float g_ForearmAngleZ = 0.0f;
-float g_ForearmAngleX = 0.0f;
-
-// Variáveis que controlam translação do torso
-float g_TorsoPositionX = 0.0f;
-float g_TorsoPositionY = 0.0f;
-
-// Variável que controla o tipo de projeção utilizada: perspectiva ou ortográfica.
-bool g_UsePerspectiveProjection = true;
-
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
 
@@ -224,6 +196,329 @@ GLint g_bbox_max_uniform;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
+
+// =====================================================================
+// Estruturas e variáveis globais do jogo
+// =====================================================================
+
+enum GameState {
+    NAVIGATION_PHASE,
+    FISHING_PHASE
+};
+
+enum CameraType {
+    GAME_CAMERA,
+    DEBUG_CAMERA
+};
+
+enum MapArea {
+    AREA_1_1 = 0,
+    AREA_1_2 = 1,
+    AREA_1_3 = 2,
+    AREA_2_1 = 3,
+    AREA_2_2 = 4,
+    AREA_2_3 = 5,
+    NUM_AREAS = 6
+};
+
+GameState g_CurrentGameState = NAVIGATION_PHASE;
+CameraType g_CurrentCamera = GAME_CAMERA;
+
+// Configurações do mapa
+const float MAP_SCALE = 10.0f;
+const float MAP_SIZE = MAP_SCALE * 2.0f;    // Tamanho real do mapa renderizado (plane.obj vai de -1 a +1, então fica -10 a +10)
+const float AREA_WIDTH = MAP_SIZE / 3.0f;
+const float AREA_HEIGHT = MAP_SIZE / 2.0f;
+
+// Estrutura para definir uma área do mapa
+struct MapAreaInfo {
+    glm::vec3 center;
+    glm::vec3 min_bounds;
+    glm::vec3 max_bounds;
+    bool has_fish;
+    
+    MapAreaInfo() : center(0.0f), min_bounds(0.0f), max_bounds(0.0f), has_fish(false) {}
+    MapAreaInfo(glm::vec3 c, glm::vec3 min_b, glm::vec3 max_b, bool fish) 
+        : center(c), min_bounds(min_b), max_bounds(max_b), has_fish(fish) {}
+};
+
+MapAreaInfo g_MapAreas[NUM_AREAS];
+
+// Estrutura para representar uma AABB (Axis-Aligned Bounding Box)
+struct AABB {
+    glm::vec3 min;
+    glm::vec3 max;
+    
+    AABB() : min(0.0f), max(0.0f) {}
+    AABB(glm::vec3 min_val, glm::vec3 max_val) : min(min_val), max(max_val) {}
+};
+
+// Estrutura do barco
+struct Boat {
+    glm::vec3 position;
+    float rotation_y;  // Rotação no eixo Y
+    float speed;
+    AABB bbox;
+    
+    Boat() : position(0.0f, 0.0f, 0.0f), rotation_y(0.0f), speed(2.0f) {}
+};
+
+// Estrutura do peixe
+struct Fish {
+    glm::vec3 position;
+    float bezier_t;    // Parâmetro t da curva de Bézier (0.0 a 1.0)
+    float speed;
+    float rotation_y;  // Rotação Y para orientar o peixe na direção do movimento
+    AABB bbox;
+    
+    Fish() : position(0.0f, -0.5f, 0.0f), bezier_t(0.0f), speed(0.5f), rotation_y(0.0f) {}
+};
+
+// Estrutura da isca
+struct Bait {
+    glm::vec3 position;
+    glm::vec3 velocity;
+    bool is_launched;
+    bool is_in_water;
+    float radius;
+    
+    Bait() : position(0.0f), velocity(0.0f), is_launched(false), is_in_water(false), radius(0.1f) {}
+};
+
+// Instâncias dos objetos do jogo
+Boat g_Boat;
+Fish g_Fish;
+Bait g_Bait;
+
+// Pontos de controle da curva de Bézier para o peixe
+glm::vec3 g_FishBezierPoints[4] = {
+    glm::vec3(-3.0f, -0.5f, -2.0f),  // P0
+    glm::vec3(-1.0f, -0.5f,  2.0f),  // P1
+    glm::vec3( 1.0f, -0.5f, -2.0f),  // P2
+    glm::vec3( 3.0f, -0.5f,  2.0f)   // P3
+};
+
+// Variáveis de controle específicas do jogo
+bool g_W_pressed = false;
+bool g_A_pressed = false;
+bool g_S_pressed = false;
+bool g_D_pressed = false;
+
+// =====================================================================
+// Funções auxiliares do jogo
+// =====================================================================
+
+// Função para inicializar as áreas do mapa
+void InitializeMapAreas() {
+    float half_map = MAP_SIZE / 2.0f;
+    float col_width = MAP_SIZE / 3.0f;
+    float row_height = MAP_SIZE / 2.0f;
+    
+    // Área 1,1 (superior esquerda)
+    g_MapAreas[AREA_1_1] = MapAreaInfo(
+        glm::vec3(-half_map + col_width/2, 0.0f, half_map - row_height/2),
+        glm::vec3(-half_map, -0.5f, 0.0f),
+        glm::vec3(-half_map + col_width, 0.5f, half_map),
+        false
+    );
+    
+    // Área 1,2 (superior centro)
+    g_MapAreas[AREA_1_2] = MapAreaInfo(
+        glm::vec3(-half_map + col_width*1.5f, 0.0f, half_map - row_height/2),
+        glm::vec3(-half_map + col_width, -0.5f, 0.0f),
+        glm::vec3(-half_map + col_width*2, 0.5f, half_map),
+        true  // Tem peixe
+    );
+    
+    // Área 1,3 (superior direita)
+    g_MapAreas[AREA_1_3] = MapAreaInfo(
+        glm::vec3(-half_map + col_width*2.5f, 0.0f, half_map - row_height/2),
+        glm::vec3(-half_map + col_width*2, -0.5f, 0.0f),
+        glm::vec3(half_map, 0.5f, half_map),
+        false
+    );
+    
+    // Área 2,1 (inferior esquerda)
+    g_MapAreas[AREA_2_1] = MapAreaInfo(
+        glm::vec3(-half_map + col_width/2, 0.0f, -half_map + row_height/2),
+        glm::vec3(-half_map, -0.5f, -half_map),
+        glm::vec3(-half_map + col_width, 0.5f, 0.0f),
+        true  // Tem peixe
+    );
+    
+    // Área 2,2 (inferior centro)
+    g_MapAreas[AREA_2_2] = MapAreaInfo(
+        glm::vec3(-half_map + col_width*1.5f, 0.0f, -half_map + row_height/2),
+        glm::vec3(-half_map + col_width, -0.5f, -half_map),
+        glm::vec3(-half_map + col_width*2, 0.5f, 0.0f),
+        false
+    );
+    
+    // Área 2,3 (inferior direita)
+    g_MapAreas[AREA_2_3] = MapAreaInfo(
+        glm::vec3(-half_map + col_width*2.5f, 0.0f, -half_map + row_height/2),
+        glm::vec3(-half_map + col_width*2, -0.5f, -half_map),
+        glm::vec3(half_map, 0.5f, 0.0f),
+        true  // Tem peixe
+    );
+}
+
+// Função para obter qual área o barco está atualmente
+MapArea GetCurrentArea(glm::vec3 position) {
+    for (int i = 0; i < NUM_AREAS; i++) {
+        const MapAreaInfo& area = g_MapAreas[i];
+        if (position.x >= area.min_bounds.x && position.x <= area.max_bounds.x &&
+            position.z >= area.min_bounds.z && position.z <= area.max_bounds.z) {
+            return static_cast<MapArea>(i);
+        }
+    }
+    return AREA_1_1; // Default
+}
+
+// Função para testar colisão Esfera-Esfera
+bool TestSphereSphere(glm::vec3 center1, float radius1, glm::vec3 center2, float radius2) {
+    float distance = glm::length(center1 - center2);
+    return distance <= (radius1 + radius2);
+}
+
+// Função para testar colisão Esfera-Plano
+bool TestSpherePlane(glm::vec3 sphere_center, float sphere_radius, float plane_y) {
+    return (sphere_center.y - sphere_radius) <= plane_y;
+}
+
+// Função para calcular ponto na curva de Bézier cúbica
+glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
+    float u = 1.0f - t;
+    float tt = t * t;
+    float uu = u * u;
+    float uuu = uu * u;
+    float ttt = tt * t;
+    
+    glm::vec3 point = uuu * p0;      // (1-t)^3 * P0
+    point += 3 * uu * t * p1;        // 3(1-t)^2 * t * P1
+    point += 3 * u * tt * p2;        // 3(1-t) * t^2 * P2
+    point += ttt * p3;               // t^3 * P3
+    
+    return point;
+}
+
+// Função para configurar câmera top-down (Fase Navegação)
+void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
+    glm::vec4 camera_position_c = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
+    glm::vec4 camera_lookat_l = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    glm::vec4 camera_up_vector = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
+    
+    view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    camera_position = camera_position_c;
+}
+
+// Função para configurar câmera primeira pessoa (Fase de Pesca)
+void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
+    float corrected_rotation = g_Boat.rotation_y - M_PI; // Ajuste de orientação do modelo
+    float look_x = sin(corrected_rotation);
+    float look_z = cos(corrected_rotation);
+
+    glm::vec4 camera_position_c = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) *
+                                  Matrix_Rotate_Y(corrected_rotation) *
+                                  glm::vec4(0.0f,1.0f,-0.5f,1.0f);
+    
+    glm::vec4 camera_lookat_l = camera_position_c + glm::vec4(look_x, 0.0f, look_z, 0.0f);
+    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    
+    view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    camera_position = camera_position_c;
+}
+
+// Função para atualizar a física do jogo
+void UpdateGamePhysics(float deltaTime) {
+    if (g_CurrentGameState == NAVIGATION_PHASE) {
+        // Atualizar movimento do barco
+        float boat_speed = g_Boat.speed * deltaTime;
+        if (g_W_pressed) {
+            g_Boat.position.x -= sin(g_Boat.rotation_y) * boat_speed;
+            g_Boat.position.z -= cos(g_Boat.rotation_y) * boat_speed;
+        }
+        if (g_S_pressed) {
+            g_Boat.position.x += sin(g_Boat.rotation_y) * boat_speed;
+            g_Boat.position.z += cos(g_Boat.rotation_y) * boat_speed;
+        }
+        if (g_A_pressed) {
+            g_Boat.rotation_y += 2.0f * deltaTime;
+        }
+        if (g_D_pressed) {
+            g_Boat.rotation_y -= 2.0f * deltaTime;
+        }
+        g_Boat.position.y = 0.0f;
+        
+    } else if (g_CurrentGameState == FISHING_PHASE) {
+        // Atualizar movimento do peixe na curva de Bézier
+        g_Fish.bezier_t += g_Fish.speed * deltaTime;
+        if (g_Fish.bezier_t > 1.0f) {
+            g_Fish.bezier_t = 0.0f;
+        }
+        
+        // Guardar posição anterior para calcular direção
+        glm::vec3 old_position = g_Fish.position;
+        
+        g_Fish.position = CalculateBezierPoint(g_Fish.bezier_t, 
+                                              g_FishBezierPoints[0], 
+                                              g_FishBezierPoints[1], 
+                                              g_FishBezierPoints[2], 
+                                              g_FishBezierPoints[3]);
+        
+        // Calcular rotação baseada na direção do movimento
+        glm::vec3 movement_direction = g_Fish.position - old_position;
+        if (length(movement_direction) > 0.001f) {
+            g_Fish.rotation_y = atan2(movement_direction.x, movement_direction.z);
+        }
+        
+        // Atualizar isca se estiver na água
+        if (g_Bait.is_in_water) {
+            float bait_speed = 2.0f;
+            
+            // Controlar isca através da velocidade relativa ao barco
+            glm::vec3 control_velocity(0.0f);
+            
+            // Calcular direções baseadas na orientação do barco
+            float forward_x = -sin(g_Boat.rotation_y);
+            float forward_z = -cos(g_Boat.rotation_y);
+            float right_x = -cos(g_Boat.rotation_y);
+            float right_z = sin(g_Boat.rotation_y);
+            
+            if (g_W_pressed) {
+                control_velocity.x += forward_x * bait_speed;
+                control_velocity.z += forward_z * bait_speed;
+            }
+            if (g_S_pressed) {
+                control_velocity.x -= forward_x * bait_speed;
+                control_velocity.z -= forward_z * bait_speed;
+            }
+            if (g_A_pressed) {
+                control_velocity.x += right_x * bait_speed;
+                control_velocity.z += right_z * bait_speed;
+            }
+            if (g_D_pressed) {
+                control_velocity.x -= right_x * bait_speed;
+                control_velocity.z -= right_z * bait_speed;
+            }
+            
+            // Aplicar velocidade de controle (mantendo Y fixo na água)
+            g_Bait.velocity.x = control_velocity.x;
+            g_Bait.velocity.z = control_velocity.z;
+            g_Bait.velocity.y = 0.0f;
+
+            if (TestSphereSphere(g_Bait.position, g_Bait.radius, g_Fish.position, 0.2f)) {
+                printf("PEIXE CAPTURADO!\n");
+                g_CurrentGameState = NAVIGATION_PHASE;
+                g_Bait.is_launched = false;
+                g_Bait.is_in_water = false;
+                g_Fish.bezier_t = 0.0f;
+            }
+        }
+    }
+}
 
 int main(int argc, char* argv[])
 {
@@ -252,9 +547,8 @@ int main(int argc, char* argv[])
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
     // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
-    // de pixels, e com título "INF01047 ...".
     GLFWwindow* window;
-    window = glfwCreateWindow(800, 600, "INF01047 - Seu Cartao - Seu Nome", NULL, NULL);
+    window = glfwCreateWindow(1000, 800, "Carpa Diem - De Boa na Lagoa", NULL, NULL);
     if (!window)
     {
         glfwTerminate();
@@ -298,22 +592,30 @@ int main(int argc, char* argv[])
     //
     LoadShadersFromFiles();
 
-    // Carregamos duas imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // TextureImage0
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // TextureImage1
+    // Carregamos as imagens para serem utilizadas como textura
+    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
+    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
+    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
+    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
+    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
+    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel spheremodel("../../data/sphere.obj");
-    ComputeNormals(&spheremodel);
-    BuildTrianglesAndAddToVirtualScene(&spheremodel);
+    ObjModel baitmodel("../../data/bait.obj");
+    ComputeNormals(&baitmodel);
+    BuildTrianglesAndAddToVirtualScene(&baitmodel);
 
-    ObjModel bunnymodel("../../data/bunny.obj");
-    ComputeNormals(&bunnymodel);
-    BuildTrianglesAndAddToVirtualScene(&bunnymodel);
+    ObjModel boatmodel("../../data/boat.obj");
+    ComputeNormals(&boatmodel);
+    BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
     ObjModel planemodel("../../data/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    ObjModel fishmodel("../../data/fish.obj");
+    ComputeNormals(&fishmodel);
+    BuildTrianglesAndAddToVirtualScene(&fishmodel);
 
     if ( argc > 1 )
     {
@@ -332,46 +634,72 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
+    // =====================================================================
+    // Inicialização do jogo
+    // =====================================================================
+    InitializeMapAreas();
+    
+    // Posicionar barco no centro do mapa
+    g_Boat.position = glm::vec3(0.0f, 0.0f, 0.0f);
+    g_Boat.rotation_y = 0.0f;
+
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
-    {
-        // Aqui executamos as operações de renderização
+    {        
+        // Calcular deltaTime para animações baseadas em tempo
+        static float last_time = 0.0f;
+        float current_time = (float)glfwGetTime();
+        float deltaTime = current_time - last_time;
+        last_time = current_time;
 
-        // Definimos a cor do "fundo" do framebuffer como branco.  Tal cor é
-        // definida como coeficientes RGBA: Red, Green, Blue, Alpha; isto é:
-        // Vermelho, Verde, Azul, Alpha (valor de transparência).
-        // Conversaremos sobre sistemas de cores nas aulas de Modelos de Iluminação.
-        //
-        //           R     G     B     A
-        glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+        UpdateGamePhysics(deltaTime);
 
-        // "Pintamos" todos os pixels do framebuffer com a cor definida acima,
-        // e também resetamos todos os pixels do Z-buffer (depth buffer).
+        if (g_CurrentGameState == NAVIGATION_PHASE) {
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        } else {
+            glClearColor(0.1f, 0.3f, 0.6f, 1.0f);
+        }
+
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         // Pedimos para a GPU utilizar o programa de GPU criado acima (contendo
         // os shaders de vértice e fragmentos).
         glUseProgram(g_GpuProgramID);
 
-        // Computamos a posição da câmera utilizando coordenadas esféricas.  As
-        // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
-        // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
-        // e ScrollCallback().
-        float r = g_CameraDistance;
-        float y = r*sin(g_CameraPhi);
-        float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
-        float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
+        
+        // =====================================================================
+        // Configurar câmera baseada no tipo de câmera ativo
+        // =====================================================================
+        glm::mat4 view;
+        glm::vec4 camera_position;
 
-        // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-        // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
-        glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
-        glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
-        glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+        if (g_CurrentCamera == DEBUG_CAMERA) {
+            // SetupFreeCamera(view, camera_position);
+            // Computamos a posição da câmera utilizando coordenadas esféricas.  As
+            // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
+            // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
+            // e ScrollCallback().
+            float r = g_CameraDistance;
+            float y = r*sin(g_CameraPhi);
+            float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
+            float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
 
-        // Computamos a matriz "View" utilizando os parâmetros da câmera para
-        // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-        glm::mat4 view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+            // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
+            // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
+            glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
+            glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
+            glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
+
+            // Computamos a matriz "View" utilizando os parâmetros da câmera para
+            // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
+            view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+
+        } else if (g_CurrentGameState == NAVIGATION_PHASE) {
+            SetupTopDownCamera(view, camera_position);
+        } else if (g_CurrentGameState == FISHING_PHASE) {
+            SetupFirstPersonCamera(view, camera_position);
+        }
 
         // Agora computamos a matriz de Projeção.
         glm::mat4 projection;
@@ -379,28 +707,12 @@ int main(int argc, char* argv[])
         // Note que, no sistema de coordenadas da câmera, os planos near e far
         // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
         float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -10.0f; // Posição do "far plane"
+        float farplane  = -100.0f; // Posição do "far plane"
 
-        if (g_UsePerspectiveProjection)
-        {
-            // Projeção Perspectiva.
-            // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
-            float field_of_view = 3.141592 / 3.0f;
-            projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
-        }
-        else
-        {
-            // Projeção Ortográfica.
-            // Para definição dos valores l, r, b, t ("left", "right", "bottom", "top"),
-            // PARA PROJEÇÃO ORTOGRÁFICA veja slides 219-224 do documento Aula_09_Projecoes.pdf.
-            // Para simular um "zoom" ortográfico, computamos o valor de "t"
-            // utilizando a variável g_CameraDistance.
-            float t = 1.5f*g_CameraDistance/2.5f;
-            float b = -t;
-            float r = t*g_ScreenRatio;
-            float l = -r;
-            projection = Matrix_Orthographic(l, r, b, t, nearplane, farplane);
-        }
+        // Projeção Perspectiva.
+        // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
+        float field_of_view = M_PI / 3.0f;
+        projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
@@ -410,41 +722,107 @@ int main(int argc, char* argv[])
         glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
         glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
 
-        #define SPHERE 0
-        #define BUNNY  1
-        #define PLANE  2
-
-        // Desenhamos o modelo da esfera
-        model = Matrix_Translate(-1.0f,0.0f,0.0f)
-              * Matrix_Rotate_Z(0.6f)
-              * Matrix_Rotate_X(0.2f)
-              * Matrix_Rotate_Y(g_AngleY + (float)glfwGetTime() * 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, SPHERE);
-        DrawVirtualObject("the_sphere");
-
-        // Desenhamos o modelo do coelho
-        model = Matrix_Translate(1.0f,0.0f,0.0f)
-              * Matrix_Rotate_X(g_AngleX + (float)glfwGetTime() * 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, BUNNY);
-        DrawVirtualObject("the_bunny");
+        // =====================================================================
+        // Renderizar objetos do jogo
+        // =====================================================================
+        
+        #define MAP           0
+        #define BOAT          1 
+        #define FISH          2
+        #define BAIT          3
+        #define HOOK          4
 
         // Desenhamos o plano do chão
-        model = Matrix_Translate(0.0f,-1.1f,0.0f);
+        model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, PLANE);
+        glUniform1i(g_object_id_uniform, MAP);
         DrawVirtualObject("the_plane");
 
-        // Imprimimos na tela os ângulos de Euler que controlam a rotação do
-        // terceiro cubo.
-        TextRendering_ShowEulerAngles(window);
+        // Desenhamos o barco
+        model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) 
+              * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
+              * Matrix_Scale(0.01f, 0.01f, 0.01f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, BOAT);
+        DrawVirtualObject("boat01");
 
-        // Imprimimos na informação sobre a matriz de projeção sendo utilizada.
-        TextRendering_ShowProjection(window);
+        if (g_CurrentGameState == FISHING_PHASE) {
+            // Desenhamos o peixe
+            model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
+                  * Matrix_Rotate_Y(g_Fish.rotation_y)
+                  * Matrix_Scale(0.1f, 0.1f, 0.1f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, FISH);
+            DrawVirtualObject("fish_Cube");
 
-        // Imprimimos na tela informação sobre o número de quadros renderizados
-        // por segundo (frames per second).
+            if (g_Bait.is_launched) {
+                // Atualizar física da isca
+                if (!g_Bait.is_in_water) {
+                    g_Bait.velocity.y -= 9.8f * deltaTime; // Gravidade
+                    g_Bait.position += g_Bait.velocity * deltaTime;
+                    
+                    // Verificar se a isca atingiu a água
+                    if (TestSpherePlane(g_Bait.position, g_Bait.radius, -0.3f)) {
+                        g_Bait.is_in_water = true;
+                        g_Bait.velocity = glm::vec3(0.0f);
+                        g_Bait.position.y = -0.3f;
+                        printf("Isca na água!\n");
+                    }
+                } else {
+                    g_Bait.position += g_Bait.velocity * deltaTime;
+                }
+                
+                // Desenhamos a isca
+                model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y, g_Bait.position.z)
+                      * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                      * Matrix_Scale(0.05f, 0.05f, 0.05f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, BAIT);
+                DrawVirtualObject("FishingLure");
+                
+                // Desenhamos o anzol
+                model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y - 0.1f, g_Bait.position.z) 
+                      * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                      * Matrix_Scale(0.1f, 0.1f, 0.1f);
+                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+                glUniform1i(g_object_id_uniform, HOOK);
+                DrawVirtualObject("hook");
+            }
+        }
+        
+        // Mostrar estado atual do jogo
+        if (g_ShowInfoText) {
+            std::string game_state = (g_CurrentGameState == NAVIGATION_PHASE) ? "FASE DE NAVEGAÇÃO" : "FASE DE PESCA";
+            TextRendering_PrintString(window, "Estado: " + game_state, -1.0f, 0.9f, 1.0f);
+            
+            // Mostrar área atual na Fase de Navegação
+            if (g_CurrentGameState == NAVIGATION_PHASE) {
+                MapArea current_area = GetCurrentArea(g_Boat.position);
+                bool has_fish = g_MapAreas[current_area].has_fish;
+                std::string area_info = "Area: " + std::to_string((current_area % 3) + 1) + 
+                                      "," + std::to_string((current_area / 3) + 1);
+                if (has_fish) area_info += " (Peixe!)";
+                TextRendering_PrintString(window, area_info, -1.0f, 0.8f, 1.0f);
+            }
+            
+            TextRendering_PrintString(window, "Controles:", -1.0f, 0.7f, 1.0f);
+            TextRendering_PrintString(window, "WASD - Movimento", -1.0f, 0.6f, 1.0f);
+            TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
+            TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
+            if (g_CurrentGameState == FISHING_PHASE) {
+                TextRendering_PrintString(window, "Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
+            }
+            
+            // Mostrar tipo de câmera ativa
+            std::string camera_type = (g_CurrentCamera == DEBUG_CAMERA) ? "CAMERA LIVRE" : "CAMERA JOGO";
+            TextRendering_PrintString(window, "Camera: " + camera_type, -1.0f, 0.1f, 1.0f);
+            
+            if (g_CurrentCamera == DEBUG_CAMERA) {
+                TextRendering_PrintString(window, "Botao Esquerdo Mouse + Arrastar - Rotacao", -1.0f, 0.0f, 1.0f);
+                TextRendering_PrintString(window, "Rodinha - Zoom", -1.0f, -0.1f, 1.0f);
+            }
+        }
+
         TextRendering_ShowFramesPerSecond(window);
 
         // O framebuffer onde OpenGL executa as operações de renderização não
@@ -559,24 +937,6 @@ void DrawVirtualObject(const char* object_name)
 //
 void LoadShadersFromFiles()
 {
-    // Note que o caminho para os arquivos "shader_vertex.glsl" e
-    // "shader_fragment.glsl" estão fixados, sendo que assumimos a existência
-    // da seguinte estrutura no sistema de arquivos:
-    //
-    //    + FCG_Lab_01/
-    //    |
-    //    +--+ bin/
-    //    |  |
-    //    |  +--+ Release/  (ou Debug/ ou Linux/)
-    //    |     |
-    //    |     o-- main.exe
-    //    |
-    //    +--+ src/
-    //       |
-    //       o-- shader_vertex.glsl
-    //       |
-    //       o-- shader_fragment.glsl
-    //
     GLuint vertex_shader_id = LoadShader_Vertex("../../src/shader_vertex.glsl");
     GLuint fragment_shader_id = LoadShader_Fragment("../../src/shader_fragment.glsl");
 
@@ -599,30 +959,13 @@ void LoadShadersFromFiles()
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage0"), 0);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage1"), 1);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TextureImage2"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "EarthDayTexture"), 0);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "EarthNightTexture"), 1);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "BoatTexture"), 2);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "BaitTexture"), 4);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "HookTexture"), 5);
     glUseProgram(0);
-}
-
-// Função que pega a matriz M e guarda a mesma no topo da pilha
-void PushMatrix(glm::mat4 M)
-{
-    g_MatrixStack.push(M);
-}
-
-// Função que remove a matriz atualmente no topo da pilha e armazena a mesma na variável M
-void PopMatrix(glm::mat4& M)
-{
-    if ( g_MatrixStack.empty() )
-    {
-        M = Matrix_Identity();
-    }
-    else
-    {
-        M = g_MatrixStack.top();
-        g_MatrixStack.pop();
-    }
 }
 
 // Função que computa as normais de um ObjModel, caso elas não tenham sido
@@ -1067,6 +1410,21 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
+        // Lançar isca na fase de pesca
+        if (g_CurrentGameState == FISHING_PHASE && g_CurrentCamera != DEBUG_CAMERA && !g_Bait.is_launched) {
+            g_Bait.is_launched = true;
+            g_Bait.is_in_water = false;
+            
+            // Configurar posição inicial da isca
+            g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
+            
+            // Configurar velocidade inicial da isca
+            float launch_x = -sin(g_Boat.rotation_y);
+            float launch_z = -cos(g_Boat.rotation_y);
+            g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
+            printf("Isca lançada!\n");
+        }
+        
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
         // posição atual do cursor nas variáveis g_LastCursorPosX e
         // g_LastCursorPosY.  Também, setamos a variável
@@ -1136,7 +1494,7 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         g_CameraPhi   += 0.01f*dy;
     
         // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
-        float phimax = 3.141592f/2;
+        float phimax = M_PI / 2.0f;
         float phimin = -phimax;
     
         if (g_CameraPhi > phimax)
@@ -1150,119 +1508,91 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         g_LastCursorPosX = xpos;
         g_LastCursorPosY = ypos;
     }
-
-    if (g_RightMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_ForearmAngleZ -= 0.01f*dx;
-        g_ForearmAngleX += 0.01f*dy;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
-
-    if (g_MiddleMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da antebraço com os deslocamentos
-        g_TorsoPositionX += 0.01f*dx;
-        g_TorsoPositionY -= 0.01f*dy;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
 }
 
 // Função callback chamada sempre que o usuário movimenta a "rodinha" do mouse.
 void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
 {
-    // Atualizamos a distância da câmera para a origem utilizando a
-    // movimentação da "rodinha", simulando um ZOOM.
-    g_CameraDistance -= 0.1f*yoffset;
+    // Controlar zoom da câmera ativa
+    if (g_CurrentCamera == DEBUG_CAMERA) {
+        // Atualizamos a distância da câmera para a origem utilizando a
+        // movimentação da "rodinha", simulando um ZOOM.
+        g_CameraDistance -= 0.1f*yoffset;
 
-    // Uma câmera look-at nunca pode estar exatamente "em cima" do ponto para
-    // onde ela está olhando, pois isto gera problemas de divisão por zero na
-    // definição do sistema de coordenadas da câmera. Isto é, a variável abaixo
-    // nunca pode ser zero. Versões anteriores deste código possuíam este bug,
-    // o qual foi detectado pelo aluno Vinicius Fraga (2017/2).
-    const float verysmallnumber = std::numeric_limits<float>::epsilon();
-    if (g_CameraDistance < verysmallnumber)
-        g_CameraDistance = verysmallnumber;
+        // Uma câmera look-at nunca pode estar exatamente "em cima" do ponto para
+        // onde ela está olhando, pois isto gera problemas de divisão por zero na
+        // definição do sistema de coordenadas da câmera. Isto é, a variável abaixo
+        // nunca pode ser zero. Versões anteriores deste código possuíam este bug,
+        // o qual foi detectado pelo aluno Vinicius Fraga (2017/2).
+        const float verysmallnumber = std::numeric_limits<float>::epsilon();
+        if (g_CameraDistance < verysmallnumber)
+            g_CameraDistance = verysmallnumber;
+    }
 }
 
 // Definição da função que será chamada sempre que o usuário pressionar alguma
 // tecla do teclado. Veja http://www.glfw.org/docs/latest/input_guide.html#input_key
 void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
 {
-    // =======================
-    // Não modifique este loop! Ele é utilizando para correção automatizada dos
-    // laboratórios. Deve ser sempre o primeiro comando desta função KeyCallback().
-    for (int i = 0; i < 10; ++i)
-        if (key == GLFW_KEY_0 + i && action == GLFW_PRESS && mod == GLFW_MOD_SHIFT)
-            std::exit(100 + i);
-    // =======================
-
     // Se o usuário pressionar a tecla ESC, fechamos a janela.
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
         glfwSetWindowShouldClose(window, GL_TRUE);
 
-    // O código abaixo implementa a seguinte lógica:
-    //   Se apertar tecla X       então g_AngleX += delta;
-    //   Se apertar tecla shift+X então g_AngleX -= delta;
-    //   Se apertar tecla Y       então g_AngleY += delta;
-    //   Se apertar tecla shift+Y então g_AngleY -= delta;
-    //   Se apertar tecla Z       então g_AngleZ += delta;
-    //   Se apertar tecla shift+Z então g_AngleZ -= delta;
-
-    float delta = 3.141592 / 16; // 22.5 graus, em radianos.
-
-    if (key == GLFW_KEY_X && action == GLFW_PRESS)
-    {
-        g_AngleX += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
+    // Controles WASD
+    if (key == GLFW_KEY_W) {
+        if (action == GLFW_PRESS) g_W_pressed = true;
+        else if (action == GLFW_RELEASE) g_W_pressed = false;
     }
-
-    if (key == GLFW_KEY_Y && action == GLFW_PRESS)
-    {
-        g_AngleY += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
+    if (key == GLFW_KEY_A) {
+        if (action == GLFW_PRESS) g_A_pressed = true;
+        else if (action == GLFW_RELEASE) g_A_pressed = false;
     }
-    if (key == GLFW_KEY_Z && action == GLFW_PRESS)
-    {
-        g_AngleZ += (mod & GLFW_MOD_SHIFT) ? -delta : delta;
+    if (key == GLFW_KEY_S) {
+        if (action == GLFW_PRESS) g_S_pressed = true;
+        else if (action == GLFW_RELEASE) g_S_pressed = false;
     }
-
-    // Se o usuário apertar a tecla espaço, resetamos os ângulos de Euler para zero.
-    if (key == GLFW_KEY_SPACE && action == GLFW_PRESS)
-    {
-        g_AngleX = 0.0f;
-        g_AngleY = 0.0f;
-        g_AngleZ = 0.0f;
-        g_ForearmAngleX = 0.0f;
-        g_ForearmAngleZ = 0.0f;
-        g_TorsoPositionX = 0.0f;
-        g_TorsoPositionY = 0.0f;
+    if (key == GLFW_KEY_D) {
+        if (action == GLFW_PRESS) g_D_pressed = true;
+        else if (action == GLFW_RELEASE) g_D_pressed = false;
     }
-
-    // Se o usuário apertar a tecla P, utilizamos projeção perspectiva.
-    if (key == GLFW_KEY_P && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = true;
+    
+    // Alternar entre fases com Enter
+    if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
+        if (g_CurrentGameState == NAVIGATION_PHASE) {
+            MapArea current_area = GetCurrentArea(g_Boat.position);
+            if (g_MapAreas[current_area].has_fish) {
+                g_CurrentGameState = FISHING_PHASE;
+                g_Bait.position = g_Boat.position;
+                g_Bait.position.y = 0.5f;
+                g_Bait.is_launched = false;
+                g_Bait.is_in_water = false;
+                
+                // Configurar curva de Bézier do peixe baseada na área atual
+                glm::vec3 area_center = g_MapAreas[current_area].center;
+                g_FishBezierPoints[0] = area_center + glm::vec3(-1.0f, -0.5f, -1.0f);
+                g_FishBezierPoints[1] = area_center + glm::vec3(-0.5f, -0.5f, 1.0f);
+                g_FishBezierPoints[2] = area_center + glm::vec3(0.5f, -0.5f, -1.0f);
+                g_FishBezierPoints[3] = area_center + glm::vec3(1.0f, -0.5f, 1.0f);
+                
+                printf("Mudando para Fase de Pescaria na área %d\n", current_area);
+            } else {
+                printf("Nao há peixe nesta área! Procure uma área com peixe.\n");
+            }
+        } else {
+            g_CurrentGameState = NAVIGATION_PHASE;
+            printf("Mudando para Fase de Navegação\n");
+        }
     }
-
-    // Se o usuário apertar a tecla O, utilizamos projeção ortográfica.
-    if (key == GLFW_KEY_O && action == GLFW_PRESS)
-    {
-        g_UsePerspectiveProjection = false;
+    
+    // Alternar câmera livre com tecla C
+    if (key == GLFW_KEY_C && action == GLFW_PRESS) {
+        if (g_CurrentCamera == GAME_CAMERA) {
+            g_CurrentCamera = DEBUG_CAMERA;
+            printf("Câmera Debug ativada - Use mouse para controlar\n");
+        } else {
+            g_CurrentCamera = GAME_CAMERA;
+            printf("Câmera do jogo ativada\n");
+        }
     }
 
     // Se o usuário apertar a tecla H, fazemos um "toggle" do texto informativo mostrado na tela.
@@ -1270,112 +1600,12 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     {
         g_ShowInfoText = !g_ShowInfoText;
     }
-
-    // Se o usuário apertar a tecla R, recarregamos os shaders dos arquivos "shader_fragment.glsl" e "shader_vertex.glsl".
-    if (key == GLFW_KEY_R && action == GLFW_PRESS)
-    {
-        LoadShadersFromFiles();
-        fprintf(stdout,"Shaders recarregados!\n");
-        fflush(stdout);
-    }
 }
 
 // Definimos o callback para impressão de erros da GLFW no terminal
 void ErrorCallback(int error, const char* description)
 {
     fprintf(stderr, "ERROR: GLFW: %s\n", description);
-}
-
-// Esta função recebe um vértice com coordenadas de modelo p_model e passa o
-// mesmo por todos os sistemas de coordenadas armazenados nas matrizes model,
-// view, e projection; e escreve na tela as matrizes e pontos resultantes
-// dessas transformações.
-void TextRendering_ShowModelViewProjection(
-    GLFWwindow* window,
-    glm::mat4 projection,
-    glm::mat4 view,
-    glm::mat4 model,
-    glm::vec4 p_model
-)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    glm::vec4 p_world = model*p_model;
-    glm::vec4 p_camera = view*p_world;
-    glm::vec4 p_clip = projection*p_camera;
-    glm::vec4 p_ndc = p_clip / p_clip.w;
-
-    float pad = TextRendering_LineHeight(window);
-
-    TextRendering_PrintString(window, " Model matrix             Model     In World Coords.", -1.0f, 1.0f-pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, model, p_model, -1.0f, 1.0f-2*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-6*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-7*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-8*pad, 1.0f);
-
-    TextRendering_PrintString(window, " View matrix              World     In Camera Coords.", -1.0f, 1.0f-9*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProduct(window, view, p_world, -1.0f, 1.0f-10*pad, 1.0f);
-
-    TextRendering_PrintString(window, "                                        |  ", -1.0f, 1.0f-14*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .-----------'  ", -1.0f, 1.0f-15*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V              ", -1.0f, 1.0f-16*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Projection matrix        Camera                    In NDC", -1.0f, 1.0f-17*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductDivW(window, projection, p_camera, -1.0f, 1.0f-18*pad, 1.0f);
-
-    int width, height;
-    glfwGetFramebufferSize(window, &width, &height);
-
-    glm::vec2 a = glm::vec2(-1, -1);
-    glm::vec2 b = glm::vec2(+1, +1);
-    glm::vec2 p = glm::vec2( 0,  0);
-    glm::vec2 q = glm::vec2(width, height);
-
-    glm::mat4 viewport_mapping = Matrix(
-        (q.x - p.x)/(b.x-a.x), 0.0f, 0.0f, (b.x*p.x - a.x*q.x)/(b.x-a.x),
-        0.0f, (q.y - p.y)/(b.y-a.y), 0.0f, (b.y*p.y - a.y*q.y)/(b.y-a.y),
-        0.0f , 0.0f , 1.0f , 0.0f ,
-        0.0f , 0.0f , 0.0f , 1.0f
-    );
-
-    TextRendering_PrintString(window, "                                                       |  ", -1.0f, 1.0f-22*pad, 1.0f);
-    TextRendering_PrintString(window, "                            .--------------------------'  ", -1.0f, 1.0f-23*pad, 1.0f);
-    TextRendering_PrintString(window, "                            V                           ", -1.0f, 1.0f-24*pad, 1.0f);
-
-    TextRendering_PrintString(window, " Viewport matrix           NDC      In Pixel Coords.", -1.0f, 1.0f-25*pad, 1.0f);
-    TextRendering_PrintMatrixVectorProductMoreDigits(window, viewport_mapping, p_ndc, -1.0f, 1.0f-26*pad, 1.0f);
-}
-
-// Escrevemos na tela os ângulos de Euler definidos nas variáveis globais
-// g_AngleX, g_AngleY, e g_AngleZ.
-void TextRendering_ShowEulerAngles(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float pad = TextRendering_LineHeight(window);
-
-    char buffer[80];
-    snprintf(buffer, 80, "Euler Angles rotation matrix = Z(%.2f)*Y(%.2f)*X(%.2f)\n", g_AngleZ, g_AngleY, g_AngleX);
-
-    TextRendering_PrintString(window, buffer, -1.0f+pad/10, -1.0f+2*pad/10, 1.0f);
-}
-
-// Escrevemos na tela qual matriz de projeção está sendo utilizada.
-void TextRendering_ShowProjection(GLFWwindow* window)
-{
-    if ( !g_ShowInfoText )
-        return;
-
-    float lineheight = TextRendering_LineHeight(window);
-    float charwidth = TextRendering_CharWidth(window);
-
-    if ( g_UsePerspectiveProjection )
-        TextRendering_PrintString(window, "Perspective", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
-    else
-        TextRendering_PrintString(window, "Orthographic", 1.0f-13*charwidth, -1.0f+2*lineheight/10, 1.0f);
 }
 
 // Escrevemos na tela o número de quadros renderizados por segundo (frames per

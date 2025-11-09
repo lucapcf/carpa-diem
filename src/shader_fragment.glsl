@@ -19,9 +19,12 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define SPHERE 0
-#define BUNNY  1
-#define PLANE  2
+#define MAP    0  // Plane como mapa
+#define BOAT   1  // Boat.obj como barco
+#define FISH   2  // fish como peixe
+#define BAIT   3  // FishingLure (isca)
+#define HOOK   4  // Hook (anzol)
+
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -29,16 +32,15 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D TextureImage0;
-uniform sampler2D TextureImage1;
-uniform sampler2D TextureImage2;
+uniform sampler2D EarthDayTexture;    // TextureImage0 - Earth surface texture
+uniform sampler2D EarthNightTexture;  // TextureImage1 - Earth night lights
+uniform sampler2D BoatTexture;        // TextureImage2 - Boat texture
+uniform sampler2D FishTexture;        // TextureImage3 - Fish texture  
+uniform sampler2D BaitTexture;        // TextureImage4 - Bait texture
+uniform sampler2D HookTexture;        // TextureImage5 - Hook texture
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
-
-// Constantes
-#define M_PI   3.14159265358979323846
-#define M_PI_2 1.57079632679489661923
 
 void main()
 {
@@ -65,62 +67,38 @@ void main()
     vec4 v = normalize(camera_position - p);
 
     // Coordenadas de textura U e V
-    float U = 0.0;
-    float V = 0.0;
+    vec2 uv_coords;
 
-    if ( object_id == SPHERE )
-    {
-        // PREENCHA AQUI as coordenadas de textura da esfera, computadas com
-        // projeção esférica EM COORDENADAS DO MODELO. Utilize como referência
-        // o slides 134-150 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // A esfera que define a projeção deve estar centrada na posição
-        // "bbox_center" definida abaixo.
+    // Obtemos a refletância difusa a partir da leitura da imagem de textura apropriada
+    vec3 Kd0;
+    vec3 Kd;
 
-        // Você deve utilizar:
-        //   função 'length( )' : comprimento Euclidiano de um vetor
-        //   função 'atan( , )' : arcotangente. Veja https://en.wikipedia.org/wiki/Atan2.
-        //   função 'asin( )'   : seno inverso.
-        //   constante M_PI
-        //   variável position_model
-
-        vec4 bbox_center = (bbox_min + bbox_max) / 2.0;
-
-        U = 0.0;
-        V = 0.0;
+    if (object_id == MAP) {
+        uv_coords = texcoords;
+        Kd0 = texture(EarthDayTexture, uv_coords).rgb;
     }
-    else if ( object_id == BUNNY )
-    {
-        // PREENCHA AQUI as coordenadas de textura do coelho, computadas com
-        // projeção planar XY em COORDENADAS DO MODELO. Utilize como referência
-        // o slides 99-104 do documento Aula_20_Mapeamento_de_Texturas.pdf,
-        // e também use as variáveis min*/max* definidas abaixo para normalizar
-        // as coordenadas de textura U e V dentro do intervalo [0,1]. Para
-        // tanto, veja por exemplo o mapeamento da variável 'p_v' utilizando
-        // 'h' no slides 158-160 do documento Aula_20_Mapeamento_de_Texturas.pdf.
-        // Veja também a Questão 4 do Questionário 4 no Moodle.
-
-        float minx = bbox_min.x;
-        float maxx = bbox_max.x;
-
-        float miny = bbox_min.y;
-        float maxy = bbox_max.y;
-
-        float minz = bbox_min.z;
-        float maxz = bbox_max.z;
-
-        U = 0.0;
-        V = 0.0;
+    else if (object_id == BOAT) {
+        uv_coords = texcoords;
+        Kd0 = texture(BoatTexture, uv_coords).rgb;
     }
-    else if ( object_id == PLANE )
-    {
-        // Coordenadas de textura do plano, obtidas do arquivo OBJ.
-        U = texcoords.x;
-        V = texcoords.y;
+    else if (object_id == FISH) {
+        uv_coords = texcoords;
+        Kd0 = texture(FishTexture, uv_coords).rgb;
     }
-
-    // Obtemos a refletância difusa a partir da leitura da imagem TextureImage0
-    vec3 Kd0 = texture(TextureImage0, vec2(U,V)).rgb;
-
+    else if (object_id == BAIT) {
+        uv_coords = texcoords;
+        Kd0 = texture(BaitTexture, uv_coords).rgb;
+    }
+    else if (object_id == HOOK) {
+        uv_coords = texcoords;
+        Kd0 = texture(HookTexture, uv_coords).rgb;
+    }
+    else {
+        uv_coords = texcoords;
+        // Fallback: usa EarthDayTexture
+        Kd0 = texture(EarthDayTexture, uv_coords).rgb;
+    }
+    
     // Equação de Iluminação
     float lambert = max(0,dot(n,l));
 
