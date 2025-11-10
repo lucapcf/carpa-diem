@@ -48,9 +48,8 @@
 // Headers locais, definidos na pasta "include/"
 #include "utils.h"
 #include "matrices.h"
-
-#define M_PI   3.14159265358979323846
-#define M_PI_2 1.57079632679489661923
+#include "game_state.h"
+#include "game_types.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -135,6 +134,9 @@ void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float
 // outras informações do programa. Definidas após main().
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
 
+// Função para desenhar grid das zonas de pesca
+void DrawFishingGrid();
+
 // Funções callback para comunicação com o sistema operacional e interação do
 // usuário. Veja mais comentários nas definições das mesmas, abaixo.
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -194,173 +196,98 @@ GLint g_object_id_uniform;
 GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
 
+// Grid variables para desenhar linhas das zonas de pesca
+GLuint g_GridVAO = 0;
+GLuint g_GridVBO = 0;
+int g_GridVertexCount = 0;
+bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid
+
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
-
-// =====================================================================
-// Estruturas e variáveis globais do jogo
-// =====================================================================
-
-enum GameState {
-    NAVIGATION_PHASE,
-    FISHING_PHASE
-};
-
-enum CameraType {
-    GAME_CAMERA,
-    DEBUG_CAMERA
-};
-
-enum MapArea {
-    AREA_1_1 = 0,
-    AREA_1_2 = 1,
-    AREA_1_3 = 2,
-    AREA_2_1 = 3,
-    AREA_2_2 = 4,
-    AREA_2_3 = 5,
-    NUM_AREAS = 6
-};
-
-GameState g_CurrentGameState = NAVIGATION_PHASE;
-CameraType g_CurrentCamera = GAME_CAMERA;
-
-// Configurações do mapa
-const float MAP_SCALE = 10.0f;
-const float MAP_SIZE = MAP_SCALE * 2.0f;    // Tamanho real do mapa renderizado (plane.obj vai de -1 a +1, então fica -10 a +10)
-const float AREA_WIDTH = MAP_SIZE / 3.0f;
-const float AREA_HEIGHT = MAP_SIZE / 2.0f;
-
-// Estrutura para definir uma área do mapa
-struct MapAreaInfo {
-    glm::vec3 center;
-    glm::vec3 min_bounds;
-    glm::vec3 max_bounds;
-    bool has_fish;
-    
-    MapAreaInfo() : center(0.0f), min_bounds(0.0f), max_bounds(0.0f), has_fish(false) {}
-    MapAreaInfo(glm::vec3 c, glm::vec3 min_b, glm::vec3 max_b, bool fish) 
-        : center(c), min_bounds(min_b), max_bounds(max_b), has_fish(fish) {}
-};
-
-MapAreaInfo g_MapAreas[NUM_AREAS];
-
-// Estrutura para representar uma AABB (Axis-Aligned Bounding Box)
-struct AABB {
-    glm::vec3 min;
-    glm::vec3 max;
-    
-    AABB() : min(0.0f), max(0.0f) {}
-    AABB(glm::vec3 min_val, glm::vec3 max_val) : min(min_val), max(max_val) {}
-};
-
-// Estrutura do barco
-struct Boat {
-    glm::vec3 position;
-    float rotation_y;  // Rotação no eixo Y
-    float speed;
-    AABB bbox;
-    
-    Boat() : position(0.0f, 0.0f, 0.0f), rotation_y(0.0f), speed(2.0f) {}
-};
-
-// Estrutura do peixe
-struct Fish {
-    glm::vec3 position;
-    float bezier_t;    // Parâmetro t da curva de Bézier (0.0 a 1.0)
-    float speed;
-    float rotation_y;  // Rotação Y para orientar o peixe na direção do movimento
-    AABB bbox;
-    
-    Fish() : position(0.0f, -0.5f, 0.0f), bezier_t(0.0f), speed(0.5f), rotation_y(0.0f) {}
-};
-
-// Estrutura da isca
-struct Bait {
-    glm::vec3 position;
-    glm::vec3 velocity;
-    bool is_launched;
-    bool is_in_water;
-    float radius;
-    
-    Bait() : position(0.0f), velocity(0.0f), is_launched(false), is_in_water(false), radius(0.1f) {}
-};
-
-// Instâncias dos objetos do jogo
-Boat g_Boat;
-Fish g_Fish;
-Bait g_Bait;
-
-// Pontos de controle da curva de Bézier para o peixe
-glm::vec3 g_FishBezierPoints[4] = {
-    glm::vec3(-3.0f, -0.5f, -2.0f),  // P0
-    glm::vec3(-1.0f, -0.5f,  2.0f),  // P1
-    glm::vec3( 1.0f, -0.5f, -2.0f),  // P2
-    glm::vec3( 3.0f, -0.5f,  2.0f)   // P3
-};
-
-// Variáveis de controle específicas do jogo
-bool g_W_pressed = false;
-bool g_A_pressed = false;
-bool g_S_pressed = false;
-bool g_D_pressed = false;
 
 // =====================================================================
 // Funções auxiliares do jogo
 // =====================================================================
 
-// Função para inicializar as áreas do mapa
-void InitializeMapAreas() {
+
+
+// Função para inicializar o grid das zonas de pesca
+void InitializeFishingGrid() {
+    // Criar linhas para dividir o mapa em uma grade 3x2 (3 colunas, 2 linhas)
+    // O mapa renderizado vai de -MAP_SIZE/2 a +MAP_SIZE/2 em ambos os eixos
+    std::vector<float> grid_vertices;
     float half_map = MAP_SIZE / 2.0f;
     float col_width = MAP_SIZE / 3.0f;
-    float row_height = MAP_SIZE / 2.0f;
     
-    // Área 1,1 (superior esquerda)
-    g_MapAreas[AREA_1_1] = MapAreaInfo(
-        glm::vec3(-half_map + col_width/2, 0.0f, half_map - row_height/2),
-        glm::vec3(-half_map, -0.5f, 0.0f),
-        glm::vec3(-half_map + col_width, 0.5f, half_map),
-        false
-    );
+    // Linhas verticais (dividem as 3 colunas)
+    for (int i = 1; i < 3; i++) {
+        float x = -half_map + col_width * i;
+        // Linha vertical de z = -half_map até z = +half_map
+        grid_vertices.push_back(x);     // x
+        grid_vertices.push_back(-0.59f); // y (ligeiramente acima do mapa)
+        grid_vertices.push_back(-half_map); // z (início)
+        
+        grid_vertices.push_back(x);     // x
+        grid_vertices.push_back(-0.59f); // y
+        grid_vertices.push_back(half_map);  // z (fim)
+    }
     
-    // Área 1,2 (superior centro)
-    g_MapAreas[AREA_1_2] = MapAreaInfo(
-        glm::vec3(-half_map + col_width*1.5f, 0.0f, half_map - row_height/2),
-        glm::vec3(-half_map + col_width, -0.5f, 0.0f),
-        glm::vec3(-half_map + col_width*2, 0.5f, half_map),
-        true  // Tem peixe
-    );
+    // Linha horizontal (divide as 2 linhas)
+    float z = 0.0f; // Centro do mapa
+    grid_vertices.push_back(-half_map); // x (início)
+    grid_vertices.push_back(-0.59f);    // y
+    grid_vertices.push_back(z);         // z
     
-    // Área 1,3 (superior direita)
-    g_MapAreas[AREA_1_3] = MapAreaInfo(
-        glm::vec3(-half_map + col_width*2.5f, 0.0f, half_map - row_height/2),
-        glm::vec3(-half_map + col_width*2, -0.5f, 0.0f),
-        glm::vec3(half_map, 0.5f, half_map),
-        false
-    );
+    grid_vertices.push_back(half_map);  // x (fim)
+    grid_vertices.push_back(-0.59f);    // y
+    grid_vertices.push_back(z);         // z
     
-    // Área 2,1 (inferior esquerda)
-    g_MapAreas[AREA_2_1] = MapAreaInfo(
-        glm::vec3(-half_map + col_width/2, 0.0f, -half_map + row_height/2),
-        glm::vec3(-half_map, -0.5f, -half_map),
-        glm::vec3(-half_map + col_width, 0.5f, 0.0f),
-        true  // Tem peixe
-    );
+    g_GridVertexCount = grid_vertices.size() / 3;
     
-    // Área 2,2 (inferior centro)
-    g_MapAreas[AREA_2_2] = MapAreaInfo(
-        glm::vec3(-half_map + col_width*1.5f, 0.0f, -half_map + row_height/2),
-        glm::vec3(-half_map + col_width, -0.5f, -half_map),
-        glm::vec3(-half_map + col_width*2, 0.5f, 0.0f),
-        false
-    );
+    // Criar VAO e VBO para o grid
+    glGenVertexArrays(1, &g_GridVAO);
+    glGenBuffers(1, &g_GridVBO);
     
-    // Área 2,3 (inferior direita)
-    g_MapAreas[AREA_2_3] = MapAreaInfo(
-        glm::vec3(-half_map + col_width*2.5f, 0.0f, -half_map + row_height/2),
-        glm::vec3(-half_map + col_width*2, -0.5f, -half_map),
-        glm::vec3(half_map, 0.5f, 0.0f),
-        true  // Tem peixe
-    );
+    glBindVertexArray(g_GridVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_GridVBO);
+    glBufferData(GL_ARRAY_BUFFER, grid_vertices.size() * sizeof(float), grid_vertices.data(), GL_STATIC_DRAW);
+    
+    // Atributo de posição (location = 0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    
+    glBindVertexArray(0);
+}
+
+// Função para desenhar o grid das zonas de pesca
+void DrawFishingGrid() {
+    if (!g_ShowGrid || g_GridVAO == 0) return;
+    
+    // Salvar o estado atual
+    GLint current_program;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
+    
+    // Usar o programa de shader atual
+    glUseProgram(g_GpuProgramID);
+    
+    // Matriz model para o grid (sem transformações)
+    glm::mat4 model = Matrix_Identity();
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+    
+    // Usar um object_id específico para o grid (pode usar um valor que não conflite)
+    glUniform1i(g_object_id_uniform, 10); // Valor diferente dos outros objetos
+    
+    // Configurar bounding box vazia para o grid
+    glUniform4f(g_bbox_min_uniform, 0.0f, 0.0f, 0.0f, 1.0f);
+    glUniform4f(g_bbox_max_uniform, 1.0f, 1.0f, 1.0f, 1.0f);
+    
+    // Desenhar as linhas
+    glBindVertexArray(g_GridVAO);
+    glDrawArrays(GL_LINES, 0, g_GridVertexCount);
+    glBindVertexArray(0);
+    
+    // Restaurar o programa anterior
+    glUseProgram(current_program);
 }
 
 // Função para obter qual área o barco está atualmente
@@ -373,6 +300,13 @@ MapArea GetCurrentArea(glm::vec3 position) {
         }
     }
     return AREA_1_1; // Default
+}
+
+// Função para testar colisão AABB-AABB
+bool TestAABBAABB(const AABB& a, const AABB& b) {
+    return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
+           (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
+           (a.min.z <= b.max.z && a.max.z >= b.min.z);
 }
 
 // Função para testar colisão Esfera-Esfera
@@ -424,6 +358,23 @@ void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
                                   glm::vec4(0.0f,1.0f,-0.5f,1.0f);
     
     glm::vec4 camera_lookat_l = camera_position_c + glm::vec4(look_x, 0.0f, look_z, 0.0f);
+    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
+    
+    view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
+    camera_position = camera_position_c;
+}
+
+// Função para configurar câmera livre (Debug)
+void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
+    // Câmera livre em coordenadas esféricas
+    float r = g_CameraDistance;
+    float y = r * sin(g_CameraPhi);
+    float z = r * cos(g_CameraPhi) * cos(g_CameraTheta);
+    float x = r * cos(g_CameraPhi) * sin(g_CameraTheta);
+    
+    glm::vec4 camera_position_c = glm::vec4(x, y, z, 1.0f);
+    glm::vec4 camera_lookat_l = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // Olha para o centro da cena
     glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
@@ -637,15 +588,13 @@ int main(int argc, char* argv[])
     // =====================================================================
     // Inicialização do jogo
     // =====================================================================
-    InitializeMapAreas();
-    
-    // Posicionar barco no centro do mapa
-    g_Boat.position = glm::vec3(0.0f, 0.0f, 0.0f);
-    g_Boat.rotation_y = 0.0f;
+    InitializeGameState();
+    InitializeFishingGrid();
+
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
-    {        
+    {
         // Calcular deltaTime para animações baseadas em tempo
         static float last_time = 0.0f;
         float current_time = (float)glfwGetTime();
@@ -666,7 +615,7 @@ int main(int argc, char* argv[])
         // os shaders de vértice e fragmentos).
         glUseProgram(g_GpuProgramID);
 
-        
+
         // =====================================================================
         // Configurar câmera baseada no tipo de câmera ativo
         // =====================================================================
@@ -674,43 +623,17 @@ int main(int argc, char* argv[])
         glm::vec4 camera_position;
 
         if (g_CurrentCamera == DEBUG_CAMERA) {
-            // SetupFreeCamera(view, camera_position);
-            // Computamos a posição da câmera utilizando coordenadas esféricas.  As
-            // variáveis g_CameraDistance, g_CameraPhi, e g_CameraTheta são
-            // controladas pelo mouse do usuário. Veja as funções CursorPosCallback()
-            // e ScrollCallback().
-            float r = g_CameraDistance;
-            float y = r*sin(g_CameraPhi);
-            float z = r*cos(g_CameraPhi)*cos(g_CameraTheta);
-            float x = r*cos(g_CameraPhi)*sin(g_CameraTheta);
-
-            // Abaixo definimos as varáveis que efetivamente definem a câmera virtual.
-            // Veja slides 195-227 e 229-234 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-            glm::vec4 camera_position_c  = glm::vec4(x,y,z,1.0f); // Ponto "c", centro da câmera
-            glm::vec4 camera_lookat_l    = glm::vec4(0.0f,0.0f,0.0f,1.0f); // Ponto "l", para onde a câmera (look-at) estará sempre olhando
-            glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c; // Vetor "view", sentido para onde a câmera está virada
-            glm::vec4 camera_up_vector   = glm::vec4(0.0f,1.0f,0.0f,0.0f); // Vetor "up" fixado para apontar para o "céu" (eito Y global)
-
-            // Computamos a matriz "View" utilizando os parâmetros da câmera para
-            // definir o sistema de coordenadas da câmera.  Veja slides 2-14, 184-190 e 236-242 do documento Aula_08_Sistemas_de_Coordenadas.pdf.
-            view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
-
+            SetupDebugCamera(view, camera_position);
         } else if (g_CurrentGameState == NAVIGATION_PHASE) {
             SetupTopDownCamera(view, camera_position);
-        } else if (g_CurrentGameState == FISHING_PHASE) {
+        } else {
             SetupFirstPersonCamera(view, camera_position);
         }
 
-        // Agora computamos a matriz de Projeção.
         glm::mat4 projection;
+        float nearplane = -0.1f;
+        float farplane  = -100.0f;
 
-        // Note que, no sistema de coordenadas da câmera, os planos near e far
-        // estão no sentido negativo! Veja slides 176-204 do documento Aula_09_Projecoes.pdf.
-        float nearplane = -0.1f;  // Posição do "near plane"
-        float farplane  = -100.0f; // Posição do "far plane"
-
-        // Projeção Perspectiva.
-        // Para definição do field of view (FOV), veja slides 205-215 do documento Aula_09_Projecoes.pdf.
         float field_of_view = M_PI / 3.0f;
         projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
 
@@ -727,16 +650,21 @@ int main(int argc, char* argv[])
         // =====================================================================
         
         #define MAP           0
-        #define BOAT          1 
+        #define BOAT          1
         #define FISH          2
         #define BAIT          3
         #define HOOK          4
 
-        // Desenhamos o plano do chão
+        // Desenhamos o mapa
         model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
         glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, MAP);
         DrawVirtualObject("the_plane");
+
+        // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
+        if (g_CurrentGameState == NAVIGATION_PHASE) {
+            DrawFishingGrid();
+        }
 
         // Desenhamos o barco
         model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) 
@@ -1494,7 +1422,7 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         g_CameraPhi   += 0.01f*dy;
     
         // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
-        float phimax = M_PI / 2.0f;
+        float phimax = M_PI_2;
         float phimin = -phimax;
     
         if (g_CameraPhi > phimax)
@@ -1555,7 +1483,7 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS) g_D_pressed = true;
         else if (action == GLFW_RELEASE) g_D_pressed = false;
     }
-    
+
     // Alternar entre fases com Enter
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
         if (g_CurrentGameState == NAVIGATION_PHASE) {
