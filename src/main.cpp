@@ -349,16 +349,16 @@ void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
 
 // Função para configurar câmera primeira pessoa (Fase de Pesca)
 void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
-    float corrected_rotation = g_Boat.rotation_y - M_PI; // Ajuste de orientação do modelo
-    float look_x = sin(corrected_rotation);
-    float look_z = cos(corrected_rotation);
-
-    glm::vec4 camera_position_c = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) *
-                                  Matrix_Rotate_Y(corrected_rotation) *
-                                  glm::vec4(0.0f,1.0f,-0.5f,1.0f);
+    float corrected_rotation = g_Boat.rotation_y + g_CameraTheta; 
     
-    glm::vec4 camera_lookat_l = camera_position_c + glm::vec4(look_x, 0.0f, look_z, 0.0f);
-    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    float look_x = sin(corrected_rotation) * cos(g_CameraPhi);
+    float look_y = -sin(g_CameraPhi);
+    float look_z = cos(corrected_rotation) * cos(g_CameraPhi);
+    
+
+    glm::vec4 camera_position_c = glm::vec4(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z, 1.0f);
+    
+    glm::vec4 camera_view_vector = glm::vec4(look_x, look_y, look_z, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
     view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
@@ -470,6 +470,9 @@ void UpdateGamePhysics(float deltaTime) {
         }
     }
 }
+
+
+
 
 int main(int argc, char* argv[])
 {
@@ -738,7 +741,7 @@ int main(int argc, char* argv[])
             TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
             TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
             if (g_CurrentGameState == FISHING_PHASE) {
-                TextRendering_PrintString(window, "Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
+                TextRendering_PrintString(window, "Q - Lancar Isca", -1.0f, 0.2f, 1.0f);
             }
             
             // Mostrar tipo de câmera ativa
@@ -1338,21 +1341,6 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
     {
-        // Lançar isca na fase de pesca
-        if (g_CurrentGameState == FISHING_PHASE && g_CurrentCamera != DEBUG_CAMERA && !g_Bait.is_launched) {
-            g_Bait.is_launched = true;
-            g_Bait.is_in_water = false;
-            
-            // Configurar posição inicial da isca
-            g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
-            
-            // Configurar velocidade inicial da isca
-            float launch_x = -sin(g_Boat.rotation_y);
-            float launch_z = -cos(g_Boat.rotation_y);
-            g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
-            printf("Isca lançada!\n");
-        }
-        
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
         // posição atual do cursor nas variáveis g_LastCursorPosX e
         // g_LastCursorPosY.  Também, setamos a variável
@@ -1411,31 +1399,31 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
     // parâmetros que definem a posição da câmera dentro da cena virtual.
     // Assim, temos que o usuário consegue controlar a câmera.
 
-    if (g_LeftMouseButtonPressed)
-    {
-        // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-    
-        // Atualizamos parâmetros da câmera com os deslocamentos
-        g_CameraTheta -= 0.01f*dx;
-        g_CameraPhi   += 0.01f*dy;
-    
-        // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
-        float phimax = M_PI_2;
-        float phimin = -phimax;
-    
-        if (g_CameraPhi > phimax)
-            g_CameraPhi = phimax;
-    
-        if (g_CameraPhi < phimin)
-            g_CameraPhi = phimin;
-    
-        // Atualizamos as variáveis globais para armazenar a posição atual do
-        // cursor como sendo a última posição conhecida do cursor.
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-    }
+    if (!g_LeftMouseButtonPressed)
+        return;
+
+    // Deslocamento do cursor do mouse em x e y de coordenadas de tela!
+    float dx = xpos - g_LastCursorPosX;
+    float dy = ypos - g_LastCursorPosY;
+
+    // Atualizamos parâmetros da câmera com os deslocamentos
+    g_CameraTheta -= 0.01f*dx;
+    g_CameraPhi   += 0.01f*dy;
+
+    // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
+    float phimax = 3.141592f/2;
+    float phimin = -phimax;
+
+    if (g_CameraPhi > phimax)
+        g_CameraPhi = phimax;
+
+    if (g_CameraPhi < phimin)
+        g_CameraPhi = phimin;  
+
+    // Atualizamos as variáveis globais para armazenar a posição atual do
+    // cursor como sendo a última posição conhecida do cursor.
+    g_LastCursorPosX = xpos;
+    g_LastCursorPosY = ypos;
 }
 
 // Função callback chamada sempre que o usuário movimenta a "rodinha" do mouse.
@@ -1483,6 +1471,23 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS) g_D_pressed = true;
         else if (action == GLFW_RELEASE) g_D_pressed = false;
     }
+    if (key == GLFW_KEY_Q) {
+      // Lançar isca na fase de pesca
+        if (g_CurrentGameState == FISHING_PHASE && g_CurrentCamera != DEBUG_CAMERA && !g_Bait.is_launched) {
+            g_Bait.is_launched = true;
+            g_Bait.is_in_water = false;
+            
+            // Configurar posição inicial da isca
+            g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
+            
+            // Configurar velocidade inicial da isca
+            float launch_x = -sin(g_Boat.rotation_y);
+            float launch_z = -cos(g_Boat.rotation_y);
+            g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
+            printf("Isca lançada!\n");
+        }
+        
+    }
 
     // Alternar entre fases com Enter
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
@@ -1501,7 +1506,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 g_FishBezierPoints[1] = area_center + glm::vec3(-0.5f, -0.5f, 1.0f);
                 g_FishBezierPoints[2] = area_center + glm::vec3(0.5f, -0.5f, -1.0f);
                 g_FishBezierPoints[3] = area_center + glm::vec3(1.0f, -0.5f, 1.0f);
-                
+
+                // Configurar câmera para começar na frente do barco
+                g_CameraPhi = 0;
+                g_CameraTheta = -M_PI;    
+
                 printf("Mudando para Fase de Pescaria na área %d\n", current_area);
             } else {
                 printf("Nao há peixe nesta área! Procure uma área com peixe.\n");
