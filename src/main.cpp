@@ -205,6 +205,8 @@ bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
+
+glm::vec4 camera_view_vector;
 // =====================================================================
 // Funções auxiliares do jogo
 // =====================================================================
@@ -358,7 +360,7 @@ void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
 
     glm::vec4 camera_position_c = glm::vec4(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z, 1.0f);
     
-    glm::vec4 camera_view_vector = glm::vec4(look_x, look_y, look_z, 0.0f);
+    camera_view_vector = glm::vec4(look_x, look_y, look_z, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
     view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
@@ -429,14 +431,14 @@ void UpdateGamePhysics(float deltaTime) {
         if (g_Bait.is_in_water) {
             float bait_speed = 2.0f;
             
-            // Controlar isca através da velocidade relativa ao barco
             glm::vec3 control_velocity(0.0f);
             
-            // Calcular direções baseadas na orientação do barco
-            float forward_x = -sin(g_Boat.rotation_y);
-            float forward_z = -cos(g_Boat.rotation_y);
-            float right_x = -cos(g_Boat.rotation_y);
-            float right_z = sin(g_Boat.rotation_y);
+            // Calcular direções baseadas na visão da câmera (projetada no plano do mapa)
+            glm::vec3 camera_direction = glm::normalize(glm::vec3(camera_view_vector.x, 0.0f, camera_view_vector.z));
+            float forward_x = camera_direction.x;
+            float forward_z = camera_direction.z;
+            float right_x = -camera_direction.z;
+            float right_z = camera_direction.x;
             
             if (g_W_pressed) {
                 control_velocity.x += forward_x * bait_speed;
@@ -447,12 +449,12 @@ void UpdateGamePhysics(float deltaTime) {
                 control_velocity.z -= forward_z * bait_speed;
             }
             if (g_A_pressed) {
-                control_velocity.x += right_x * bait_speed;
-                control_velocity.z += right_z * bait_speed;
-            }
-            if (g_D_pressed) {
                 control_velocity.x -= right_x * bait_speed;
                 control_velocity.z -= right_z * bait_speed;
+            }
+            if (g_D_pressed) {
+                control_velocity.x += right_x * bait_speed;
+                control_velocity.z += right_z * bait_speed;
             }
             
             // Aplicar velocidade de controle (mantendo Y fixo na água)
@@ -1435,7 +1437,7 @@ void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
         // movimentação da "rodinha", simulando um ZOOM.
         g_CameraDistance -= 0.1f*yoffset;
 
-        // Uma câmera look-at nunca pode estar exatamente "em cima" do ponto para
+        // Uma câmera look-at nunca pode estar exatamente "em cima" do ponto para o
         // onde ela está olhando, pois isto gera problemas de divisão por zero na
         // definição do sistema de coordenadas da câmera. Isto é, a variável abaixo
         // nunca pode ser zero. Versões anteriores deste código possuíam este bug,
@@ -1481,8 +1483,8 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
             g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
             
             // Configurar velocidade inicial da isca
-            float launch_x = -sin(g_Boat.rotation_y);
-            float launch_z = -cos(g_Boat.rotation_y);
+            float launch_x = camera_view_vector.x;
+            float launch_z = camera_view_vector.z;
             g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
             printf("Isca lançada!\n");
         }
