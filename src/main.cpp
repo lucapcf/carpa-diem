@@ -361,7 +361,7 @@ void FirstPersonCameraConfig (GLFWwindow* window) {
     int width, height;
     glfwGetFramebufferSize(window, &width, &height);
     glfwSetCursorPos(window, width / 2.0, height / 2.0);
-    
+
     // Resetar variáveis de rastreamento do mouse
     g_FishingFirstMouse = true;
     g_FishingLastCursorX = 0.0;
@@ -457,30 +457,21 @@ void UpdateGamePhysics(float deltaTime) {
             glm::vec3 control_velocity(0.0f);
             
             // Calcular direções baseadas na visão da câmera (projetada no plano do mapa)
-            glm::vec3 camera_direction = glm::normalize(glm::vec3(camera_view_vector.x, 0.0f, camera_view_vector.z));
-            float forward_x = camera_direction.x;
-            float forward_z = camera_direction.z;
-            float right_x = -camera_direction.z;
-            float right_z = camera_direction.x;
+            glm::vec3 camera_direction = glm::vec3(camera_view_vector.x, 0.0f, camera_view_vector.z);
+            camera_direction = normalize(camera_direction);
+            
+            glm::vec4 rod_position = glm::vec4(g_Boat.position.x + camera_direction.x, 
+                0.0f, g_Boat.position.z + camera_direction.z, 0.0f);
+
+            // Calculo do vetor do caminho da vara
+            glm:: vec4 bait_direction = glm::vec4(rod_position.x - g_Bait.position.x,
+                0.0f, rod_position.z - g_Bait.position.z, 0.0f);
             
             if (g_W_pressed) {
-                control_velocity.x += forward_x * bait_speed;
-                control_velocity.z += forward_z * bait_speed;
-            }
-            if (g_S_pressed) {
-                control_velocity.x -= forward_x * bait_speed;
-                control_velocity.z -= forward_z * bait_speed;
-            }
-            if (g_A_pressed) {
-                control_velocity.x -= right_x * bait_speed;
-                control_velocity.z -= right_z * bait_speed;
-            }
-            if (g_D_pressed) {
-                control_velocity.x += right_x * bait_speed;
-                control_velocity.z += right_z * bait_speed;
+                control_velocity.x += bait_direction.x * bait_speed;
+                control_velocity.z += bait_direction.z * bait_speed;
             }
             
-            // Aplicar velocidade de controle (mantendo Y fixo na água)
             g_Bait.velocity.x = control_velocity.x;
             g_Bait.velocity.z = control_velocity.z;
             g_Bait.velocity.y = 0.0f;
