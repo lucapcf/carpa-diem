@@ -210,6 +210,15 @@ double g_FishingLastCursorY = 0.0;
 bool g_FishingFirstMouse = true;
 
 glm::vec4 camera_view_vector;
+
+// Funções de inicialização e renderização
+GLFWwindow* InitializeWindow();
+void SetupCallbacks(GLFWwindow* window);
+void InitializeOpenGL();
+void LoadGameResources();
+void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection);
+void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection);
+
 // =====================================================================
 // Funções auxiliares do jogo
 // =====================================================================
@@ -343,13 +352,11 @@ glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2
 
 // Função para configurar câmera top-down (Fase Navegação)
 void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
-    glm::vec4 camera_position_c = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
-    glm::vec4 camera_lookat_l = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    camera_position = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
+    glm::vec4 camera_view_vector = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     
-    view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
-    camera_position = camera_position_c;
+    view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
 }
 
 // Função auxiliar para resetar e capturar o mouse ao entrar na fase de pesca
@@ -380,7 +387,6 @@ void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
     float look_y = -sin(g_CameraPhi);
     float look_z = cos(corrected_rotation) * cos(g_CameraPhi);
     
-
     glm::vec4 camera_position_c = glm::vec4(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z, 1.0f);
     
     camera_view_vector = glm::vec4(look_x, look_y, look_z, 0.0f);
@@ -398,13 +404,11 @@ void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
     float z = r * cos(g_CameraPhi) * cos(g_CameraTheta);
     float x = r * cos(g_CameraPhi) * sin(g_CameraTheta);
     
-    glm::vec4 camera_position_c = glm::vec4(x, y, z, 1.0f);
-    glm::vec4 camera_lookat_l = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f); // Olha para o centro da cena
-    glm::vec4 camera_view_vector = camera_lookat_l - camera_position_c;
+    camera_position = glm::vec4(x, y, z, 1.0f);
+    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 1.0f); // Olha para o centro da cena
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
-    view = Matrix_Camera_View(camera_position_c, camera_view_vector, camera_up_vector);
-    camera_position = camera_position_c;
+    view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
 }
 
 // Função para atualizar a física do jogo
@@ -450,6 +454,23 @@ void UpdateGamePhysics(float deltaTime) {
             g_Fish.rotation_y = atan2(movement_direction.x, movement_direction.z);
         }
         
+        if (g_Bait.is_launched){
+            // Atualizar física da isca
+            if (!g_Bait.is_in_water) {
+                g_Bait.velocity.y -= 9.8f * deltaTime; // Gravidade
+                g_Bait.position += g_Bait.velocity * deltaTime;
+                
+                // Verificar se a isca atingiu a água
+                if (TestSpherePlane(g_Bait.position, g_Bait.radius, -0.3f)) {
+                    g_Bait.is_in_water = true;
+                    g_Bait.velocity = glm::vec3(0.0f);
+                    g_Bait.position.y = -0.3f;
+                    printf("Isca na água!\n");
+                }
+            } else {
+                g_Bait.position += g_Bait.velocity * deltaTime;
+            }
+        }
         // Atualizar isca se estiver na água
         if (g_Bait.is_in_water) {
             float bait_speed = 2.0f;
@@ -492,100 +513,13 @@ void UpdateGamePhysics(float deltaTime) {
 
 int main(int argc, char* argv[])
 {
-    // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
-    // sistema operacional, onde poderemos renderizar com OpenGL.
-    int success = glfwInit();
-    if (!success)
-    {
-        fprintf(stderr, "ERROR: glfwInit() failed.\n");
-        std::exit(EXIT_FAILURE);
-    }
 
-    // Definimos o callback para impressão de erros da GLFW no terminal
-    glfwSetErrorCallback(ErrorCallback);
 
-    // Pedimos para utilizar OpenGL versão 3.3 (ou superior)
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    GLFWwindow* window = InitializeWindow();
 
-    #ifdef __APPLE__
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
-    #endif
+    SetupCallbacks(window);
 
-    // Pedimos para utilizar o perfil "core", isto é, utilizaremos somente as
-    // funções modernas de OpenGL.
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
-    GLFWwindow* window;
-    window = glfwCreateWindow(1000, 800, "Carpa Diem - De Boa na Lagoa", NULL, NULL);
-    if (!window)
-    {
-        glfwTerminate();
-        fprintf(stderr, "ERROR: glfwCreateWindow() failed.\n");
-        std::exit(EXIT_FAILURE);
-    }
-
-    // Definimos a função de callback que será chamada sempre que o usuário
-    // pressionar alguma tecla do teclado ...
-    glfwSetKeyCallback(window, KeyCallback);
-    // ... ou clicar os botões do mouse ...
-    glfwSetMouseButtonCallback(window, MouseButtonCallback);
-    // ... ou movimentar o cursor do mouse em cima da janela ...
-    glfwSetCursorPosCallback(window, CursorPosCallback);
-    // ... ou rolar a "rodinha" do mouse.
-    glfwSetScrollCallback(window, ScrollCallback);
-
-    // Indicamos que as chamadas OpenGL deverão renderizar nesta janela
-    glfwMakeContextCurrent(window);
-
-    // Carregamento de todas funções definidas por OpenGL 3.3, utilizando a
-    // biblioteca GLAD.
-    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
-
-    // Definimos a função de callback que será chamada sempre que a janela for
-    // redimensionada, por consequência alterando o tamanho do "framebuffer"
-    // (região de memória onde são armazenados os pixels da imagem).
-    glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
-    FramebufferSizeCallback(window, 800, 600); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
-
-    // Imprimimos no terminal informações sobre a GPU do sistema
-    const GLubyte *vendor      = glGetString(GL_VENDOR);
-    const GLubyte *renderer    = glGetString(GL_RENDERER);
-    const GLubyte *glversion   = glGetString(GL_VERSION);
-    const GLubyte *glslversion = glGetString(GL_SHADING_LANGUAGE_VERSION);
-
-    printf("GPU: %s, %s, OpenGL %s, GLSL %s\n", vendor, renderer, glversion, glslversion);
-
-    // Carregamos os shaders de vértices e de fragmentos que serão utilizados
-    // para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
-    //
-    LoadShadersFromFiles();
-
-    // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
-    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
-    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
-    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
-    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
-
-    // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel baitmodel("../../data/bait.obj");
-    ComputeNormals(&baitmodel);
-    BuildTrianglesAndAddToVirtualScene(&baitmodel);
-
-    ObjModel boatmodel("../../data/boat.obj");
-    ComputeNormals(&boatmodel);
-    BuildTrianglesAndAddToVirtualScene(&boatmodel);
-
-    ObjModel planemodel("../../data/plane.obj");
-    ComputeNormals(&planemodel);
-    BuildTrianglesAndAddToVirtualScene(&planemodel);
-
-    ObjModel fishmodel("../../data/fish.obj");
-    ComputeNormals(&fishmodel);
-    BuildTrianglesAndAddToVirtualScene(&fishmodel);
+    LoadGameResources();
 
     if ( argc > 1 )
     {
@@ -622,11 +556,9 @@ int main(int argc, char* argv[])
 
         UpdateGamePhysics(deltaTime);
 
-        if (g_CurrentGameState == NAVIGATION_PHASE) {
-            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        } else {
-            glClearColor(0.1f, 0.3f, 0.6f, 1.0f);
-        }
+     
+        glClearColor(0.1f, 0.3f, 0.6f, 1.0f);
+        
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -640,137 +572,12 @@ int main(int argc, char* argv[])
         // =====================================================================
         glm::mat4 view;
         glm::vec4 camera_position;
-
-        if (g_CurrentCamera == DEBUG_CAMERA) {
-            SetupDebugCamera(view, camera_position);
-        } else if (g_CurrentGameState == NAVIGATION_PHASE) {
-            SetupTopDownCamera(view, camera_position);
-        } else {
-            SetupFirstPersonCamera(view, camera_position);
-        }
-
         glm::mat4 projection;
-        float nearplane = -0.1f;
-        float farplane  = -100.0f;
 
-        float field_of_view = M_PI / 3.0f;
-        projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
+        UpdateCameras(view, camera_position, projection);
+  
 
-        glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
-
-        // Enviamos as matrizes "view" e "projection" para a placa de vídeo
-        // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
-        // efetivamente aplicadas em todos os pontos.
-        glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
-        glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
-
-        // =====================================================================
-        // Renderizar objetos do jogo
-        // =====================================================================
-        
-        #define MAP           0
-        #define BOAT          1
-        #define FISH          2
-        #define BAIT          3
-        #define HOOK          4
-
-        // Desenhamos o mapa
-        model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
-        glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, MAP);
-        DrawVirtualObject("the_plane");
-
-        // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
-        if (g_CurrentGameState == NAVIGATION_PHASE) {
-            DrawFishingGrid();
-        }
-
-        // Desenhamos o barco
-        model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) 
-              * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
-              * Matrix_Scale(0.01f, 0.01f, 0.01f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, BOAT);
-        DrawVirtualObject("boat01");
-
-        if (g_CurrentGameState == FISHING_PHASE) {
-            // Desenhamos o peixe
-            model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
-                  * Matrix_Rotate_Y(g_Fish.rotation_y)
-                  * Matrix_Scale(0.1f, 0.1f, 0.1f);
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            glUniform1i(g_object_id_uniform, FISH);
-            DrawVirtualObject("fish_Cube");
-
-            if (g_Bait.is_launched) {
-                // Atualizar física da isca
-                if (!g_Bait.is_in_water) {
-                    g_Bait.velocity.y -= 9.8f * deltaTime; // Gravidade
-                    g_Bait.position += g_Bait.velocity * deltaTime;
-                    
-                    // Verificar se a isca atingiu a água
-                    if (TestSpherePlane(g_Bait.position, g_Bait.radius, -0.3f)) {
-                        g_Bait.is_in_water = true;
-                        g_Bait.velocity = glm::vec3(0.0f);
-                        g_Bait.position.y = -0.3f;
-                        printf("Isca na água!\n");
-                    }
-                } else {
-                    g_Bait.position += g_Bait.velocity * deltaTime;
-                }
-                
-                // Desenhamos a isca
-                model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y, g_Bait.position.z)
-                      * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
-                      * Matrix_Scale(0.05f, 0.05f, 0.05f);
-                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, BAIT);
-                DrawVirtualObject("FishingLure");
-                
-                // Desenhamos o anzol
-                model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y - 0.1f, g_Bait.position.z) 
-                      * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
-                      * Matrix_Scale(0.1f, 0.1f, 0.1f);
-                glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-                glUniform1i(g_object_id_uniform, HOOK);
-                DrawVirtualObject("hook");
-            }
-        }
-        
-        // Mostrar estado atual do jogo
-        if (g_ShowInfoText) {
-            std::string game_state = (g_CurrentGameState == NAVIGATION_PHASE) ? "FASE DE NAVEGAÇÃO" : "FASE DE PESCA";
-            TextRendering_PrintString(window, "Estado: " + game_state, -1.0f, 0.9f, 1.0f);
-            
-            // Mostrar área atual na Fase de Navegação
-            if (g_CurrentGameState == NAVIGATION_PHASE) {
-                MapArea current_area = GetCurrentArea(g_Boat.position);
-                bool has_fish = g_MapAreas[current_area].has_fish;
-                std::string area_info = "Area: " + std::to_string((current_area % 3) + 1) + 
-                                      "," + std::to_string((current_area / 3) + 1);
-                if (has_fish) area_info += " (Peixe!)";
-                TextRendering_PrintString(window, area_info, -1.0f, 0.8f, 1.0f);
-            }
-            
-            TextRendering_PrintString(window, "Controles:", -1.0f, 0.7f, 1.0f);
-            TextRendering_PrintString(window, "WASD - Movimento", -1.0f, 0.6f, 1.0f);
-            TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
-            TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
-            if (g_CurrentGameState == FISHING_PHASE) {
-                TextRendering_PrintString(window, "Botao Esquerdo Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
-            }
-            
-            // Mostrar tipo de câmera ativa
-            std::string camera_type = (g_CurrentCamera == DEBUG_CAMERA) ? "CAMERA LIVRE" : "CAMERA JOGO";
-            TextRendering_PrintString(window, "Camera: " + camera_type, -1.0f, 0.1f, 1.0f);
-            
-            if (g_CurrentCamera == DEBUG_CAMERA) {
-                TextRendering_PrintString(window, "Botao Esquerdo Mouse + Arrastar - Rotacao", -1.0f, 0.0f, 1.0f);
-                TextRendering_PrintString(window, "Rodinha - Zoom", -1.0f, -0.1f, 1.0f);
-            }
-        }
-
-        TextRendering_ShowFramesPerSecond(window);
+        RenderScene(window, view, projection);
 
         // O framebuffer onde OpenGL executa as operações de renderização não
         // é o mesmo que está sendo mostrado para o usuário, caso contrário
@@ -1790,3 +1597,239 @@ void PrintObjModelInfo(ObjModel* model)
 // set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
 // vim: set spell spelllang=pt_br :
 
+
+// Inicializa janela GLFW e contexto OpenGL
+GLFWwindow* InitializeWindow()
+{
+    // Inicializamos a biblioteca GLFW, utilizada para criar uma janela do
+    // sistema operacional, onde poderemos renderizar com OpenGL.
+    int success = glfwInit();
+    if (!success)
+    {
+        fprintf(stderr, "ERROR: glfwInit() failed.\n");
+        std::exit(EXIT_FAILURE);
+    }
+
+    // Definimos o callback para impressão de erros da GLFW no terminal
+    glfwSetErrorCallback(ErrorCallback);
+
+    // Pedimos para utilizar OpenGL versão 3.3 (ou superior)
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+
+    #ifdef __APPLE__
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    #endif
+
+    // Pedimos para utilizar o perfil "core", isto é, utilizaremos somente as
+    // funções modernas de OpenGL.
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    // Ativamos antialiasing (MSAA) com 4 amostras por pixel
+    glfwWindowHint(GLFW_SAMPLES, 4);
+
+    // Criamos uma janela do sistema operacional, com 800 colunas e 600 linhas
+    // de pixels
+    GLFWwindow* window;
+    window = glfwCreateWindow(1000, 800, "Carpa Diem - De Boa na Lagoa", NULL, NULL);
+    if (!window)
+    {
+        glfwTerminate();
+        fprintf(stderr, "ERROR: glfwCreateWindow() failed.\n");
+        std::exit(EXIT_FAILURE);
+    }
+
+    // Indicamos que as chamadas OpenGL deverão renderizar nesta janela
+    glfwMakeContextCurrent(window);
+
+    return window;
+
+}
+
+void SetupCallbacks(GLFWwindow* window)
+{
+    // Definimos a função de callback que será chamada sempre que o usuário
+    // pressionar alguma tecla do teclado ...
+    glfwSetKeyCallback(window, KeyCallback);
+    // ... ou clicar os botões do mouse ...
+    glfwSetMouseButtonCallback(window, MouseButtonCallback);
+    // ... ou movimentar o cursor do mouse em cima da janela ...
+    glfwSetCursorPosCallback(window, CursorPosCallback);
+    // ... ou rolar a "rodinha" do mouse.
+    glfwSetScrollCallback(window, ScrollCallback);
+    
+    // Carregamento de todas funções definidas por OpenGL 3.3, utilizando a
+    // biblioteca GLAD.
+    gladLoadGLLoader((GLADloadproc) glfwGetProcAddress);
+
+    // Definimos a função de callback que será chamada sempre que a janela for
+    // redimensionada, por consequência alterando o tamanho do "framebuffer"
+    // (região de memória onde são armazenados os pixels da imagem).
+    glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
+    FramebufferSizeCallback(window, 800, 600); // Forçamos a chamada do callback acima, para definir g_ScreenRatio.
+}
+
+void InitializeOpenGL()
+{
+    // Imprimimos no terminal informações sobre a GPU do sistema
+    const GLubyte *vendor      = glGetString(GL_VENDOR);
+    const GLubyte *renderer    = glGetString(GL_RENDERER);
+    const GLubyte *glversion   = glGetString(GL_VERSION);
+    const GLubyte *glslversion = glGetString(GL_SHADING_LANGUAGE_VERSION);
+
+    printf("GPU: %s, %s, OpenGL %s, GLSL %s\n", vendor, renderer, glversion, glslversion);
+}
+
+
+void LoadGameResources()
+{
+    // Carregamos os shaders de vértices e de fragmentos que serão utilizados
+    // para renderização. Veja slides 180-200 do documento Aula_03_Rendering_Pipeline_Grafico.pdf.
+    //
+    LoadShadersFromFiles();
+
+    // Carregamos as imagens para serem utilizadas como textura
+    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
+    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
+    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
+    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
+    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
+    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
+
+    // Construímos a representação de objetos geométricos através de malhas de triângulos
+    ObjModel baitmodel("../../data/bait.obj");
+    ComputeNormals(&baitmodel);
+    BuildTrianglesAndAddToVirtualScene(&baitmodel);
+
+    ObjModel boatmodel("../../data/boat.obj");
+    ComputeNormals(&boatmodel);
+    BuildTrianglesAndAddToVirtualScene(&boatmodel);
+
+    ObjModel planemodel("../../data/plane.obj");
+    ComputeNormals(&planemodel);
+    BuildTrianglesAndAddToVirtualScene(&planemodel);
+
+    ObjModel fishmodel("../../data/fish.obj");
+    ComputeNormals(&fishmodel);
+    BuildTrianglesAndAddToVirtualScene(&fishmodel);
+}
+
+void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection)
+{
+    if (g_CurrentCamera == DEBUG_CAMERA) {
+        SetupDebugCamera(view, camera_position);
+    } else if (g_CurrentGameState == NAVIGATION_PHASE) {
+        SetupTopDownCamera(view, camera_position);
+
+    } else {
+        SetupFirstPersonCamera(view, camera_position);
+    }
+
+    float nearplane = -0.1f;
+    float farplane  = -100.0f;
+
+    float field_of_view = M_PI / 3.0f;
+    projection = Matrix_Perspective(field_of_view, g_ScreenRatio, nearplane, farplane);
+
+}
+
+void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection)
+{
+    // Enviamos as matrizes "view" e "projection" para a placa de vídeo
+    // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
+    // efetivamente aplicadas em todos os pontos.
+    glUniformMatrix4fv(g_view_uniform       , 1 , GL_FALSE , glm::value_ptr(view));
+    glUniformMatrix4fv(g_projection_uniform , 1 , GL_FALSE , glm::value_ptr(projection));
+
+    // =====================================================================
+    // Renderizar objetos do jogo
+    // =====================================================================
+    
+    #define MAP           0
+    #define BOAT          1
+    #define FISH          2
+    #define BAIT          3
+    #define HOOK          4
+
+    // Desenhamos o mapa
+    glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, MAP);
+    DrawVirtualObject("the_plane");
+
+    // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
+    if (g_CurrentGameState == NAVIGATION_PHASE) {
+        DrawFishingGrid();
+    }
+
+    // Desenhamos o barco
+    model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) 
+            * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
+            * Matrix_Scale(0.01f, 0.01f, 0.01f);
+    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, BOAT);
+    DrawVirtualObject("boat01");
+
+    if (g_CurrentGameState == FISHING_PHASE) {
+        // Desenhamos o peixe
+        model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
+                * Matrix_Rotate_Y(g_Fish.rotation_y)
+                * Matrix_Scale(0.1f, 0.1f, 0.1f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, FISH);
+        DrawVirtualObject("fish_Cube");
+
+        if (g_Bait.is_launched) {
+            // Desenhamos a isca
+            model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y, g_Bait.position.z)
+                    * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                    * Matrix_Scale(0.05f, 0.05f, 0.05f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, BAIT);
+            DrawVirtualObject("FishingLure");
+            
+            // Desenhamos o anzol
+            model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y - 0.1f, g_Bait.position.z) 
+                    * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                    * Matrix_Scale(0.1f, 0.1f, 0.1f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, HOOK);
+            DrawVirtualObject("hook");
+        }
+    }
+    
+    // Mostrar estado atual do jogo
+    if (g_ShowInfoText) {
+        std::string game_state = (g_CurrentGameState == NAVIGATION_PHASE) ? "FASE DE NAVEGAÇÃO" : "FASE DE PESCA";
+        TextRendering_PrintString(window, "Estado: " + game_state, -1.0f, 0.9f, 1.0f);
+        
+        // Mostrar área atual na Fase de Navegação
+        if (g_CurrentGameState == NAVIGATION_PHASE) {
+            MapArea current_area = GetCurrentArea(g_Boat.position);
+            bool has_fish = g_MapAreas[current_area].has_fish;
+            std::string area_info = "Area: " + std::to_string((current_area % 3) + 1) + 
+                                    "," + std::to_string((current_area / 3) + 1);
+            if (has_fish) area_info += " (Peixe!)";
+            TextRendering_PrintString(window, area_info, -1.0f, 0.8f, 1.0f);
+        }
+        
+        TextRendering_PrintString(window, "Controles:", -1.0f, 0.7f, 1.0f);
+        TextRendering_PrintString(window, "WASD - Movimento", -1.0f, 0.6f, 1.0f);
+        TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
+        TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
+        if (g_CurrentGameState == FISHING_PHASE) {
+            TextRendering_PrintString(window, "Botao Esquerdo Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
+        }
+        
+        // Mostrar tipo de câmera ativa
+        std::string camera_type = (g_CurrentCamera == DEBUG_CAMERA) ? "CAMERA LIVRE" : "CAMERA JOGO";
+        TextRendering_PrintString(window, "Camera: " + camera_type, -1.0f, 0.1f, 1.0f);
+        
+        if (g_CurrentCamera == DEBUG_CAMERA) {
+            TextRendering_PrintString(window, "Botao Esquerdo Mouse + Arrastar - Rotacao", -1.0f, 0.0f, 1.0f);
+            TextRendering_PrintString(window, "Rodinha - Zoom", -1.0f, -0.1f, 1.0f);
+        }
+    }
+
+    TextRendering_ShowFramesPerSecond(window);
+}
