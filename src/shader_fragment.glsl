@@ -24,6 +24,7 @@ uniform mat4 projection;
 #define FISH   2  // fish como peixe
 #define BAIT   3  // FishingLure (isca)
 #define HOOK   4  // Hook (anzol)
+#define FISHING_LINE 6 // Linha de pesca
 
 uniform int object_id;
 
@@ -93,6 +94,9 @@ void main()
         uv_coords = texcoords;
         Kd0 = texture(HookTexture, uv_coords).rgb;
     }
+    else if (object_id == FISHING_LINE) {
+        Kd0 = vec3(1.0, 1.0, 1.0); // Branco puro
+    }
     else {
         uv_coords = texcoords;
         // Fallback: usa EarthDayTexture
@@ -121,5 +125,5 @@ void main()
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
     color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
-} 
+}
 
