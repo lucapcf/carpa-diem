@@ -611,6 +611,9 @@ int main(int argc, char* argv[])
 
         glm::mat4 model = Matrix_Identity(); // Transformação identidade de modelagem
 
+        // Configurar câmera ANTES de enviar matrizes para GPU
+        UpdateCameras(view, camera_position, projection);
+
         // Enviamos as matrizes "view" e "projection" para a placa de vídeo
         // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
         // efetivamente aplicadas em todos os pontos.
@@ -782,11 +785,9 @@ int main(int argc, char* argv[])
         }
 
         TextRendering_ShowFramesPerSecond(window);
-
-        UpdateCameras(view, camera_position, projection);
   
-
-        RenderScene(window, view, projection);
+        // NOTA: RenderScene comentado pois o rendering já é feito acima no loop principal
+        // RenderScene(window, view, projection);
 
         // O framebuffer onde OpenGL executa as operações de renderização não
         // é o mesmo que está sendo mostrado para o usuário, caso contrário
