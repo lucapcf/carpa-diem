@@ -51,6 +51,7 @@
 #include "game_state.h"
 #include "game_types.h"
 #include "rod_system.h"
+#include "fish_system.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -481,6 +482,9 @@ void UpdateGamePhysics(float deltaTime) {
             g_Fish.rotation_y = atan2(movement_direction.x, movement_direction.z);
         }
         
+        // Atualizar o peixe com movimento aleatório
+        UpdateRandomFish(deltaTime);
+        
         if (g_Bait.is_launched){
             // Atualizar física da isca
             if (!g_Bait.is_in_water) {
@@ -689,6 +693,14 @@ int main(int argc, char* argv[])
             // Desenhamos o peixe
             model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
                   * Matrix_Rotate_Y(g_Fish.rotation_y)
+                  * Matrix_Scale(0.1f, 0.1f, 0.1f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, FISH);
+            DrawVirtualObject("fish_Cube");
+            
+            // Desenhamos o peixe com movimento aleatório (segundo peixe)
+            model = Matrix_Translate(g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z) 
+                  * Matrix_Rotate_Y(g_RandomFish.rotation_y)
                   * Matrix_Scale(0.1f, 0.1f, 0.1f);
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
             glUniform1i(g_object_id_uniform, FISH);
@@ -1578,12 +1590,11 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
                 
-                // Configurar curva de Bézier do peixe baseada na área atual
-                glm::vec3 area_center = g_MapAreas[current_area].center;
-                g_FishBezierPoints[0] = area_center + glm::vec3(-1.0f, -0.5f, -1.0f);
-                g_FishBezierPoints[1] = area_center + glm::vec3(-0.5f, -0.5f, 1.0f);
-                g_FishBezierPoints[2] = area_center + glm::vec3(0.5f, -0.5f, -1.0f);
-                g_FishBezierPoints[3] = area_center + glm::vec3(1.0f, -0.5f, 1.0f);
+                // Gerar nova rota aleatória para o peixe
+                GenerateFishRoute(current_area);
+                
+                // Gerar o peixe com movimento aleatório
+                SpawnRandomFish(current_area);
 
                 // Configurar câmera para começar na frente do barco
                 FirstPersonCameraConfig(window);
