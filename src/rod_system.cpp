@@ -196,10 +196,18 @@ void DrawFishingLine(const glm::vec3& rod_tip, const glm::vec3& bait_position, c
         InitializeFishingLine();
     }
     
-    // Criar vértices da linha: ponto inicial (ponta da vara) -> ponto final (isca)
+    // Criar vértices da linha com posição, normal e texcoord
+    // Shader espera: vec4 position, vec4 normal, vec2 texcoord
+    // Cada vértice tem: posição (4) + normal (4) + texcoord (2) = 10 floats
     float line_vertices[] = {
-        rod_tip.x, rod_tip.y, rod_tip.z,
-        bait_position.x, bait_position.y, bait_position.z
+        // Vértice 1: ponta da vara
+        rod_tip.x, rod_tip.y, rod_tip.z, 1.0f,      // posição (vec4)
+        0.0f, 1.0f, 0.0f, 0.0f,                      // normal (vec4, w=0 para vetor)
+        0.0f, 0.0f,                                  // texcoord
+        // Vértice 2: posição da isca
+        bait_position.x, bait_position.y, bait_position.z, 1.0f,  // posição (vec4)
+        0.0f, 1.0f, 0.0f, 0.0f,                      // normal (vec4)
+        1.0f, 0.0f                                   // texcoord
     };
     
     // Atualizar buffer com as novas posições
@@ -207,8 +215,20 @@ void DrawFishingLine(const glm::vec3& rod_tip, const glm::vec3& bait_position, c
     glBindBuffer(GL_ARRAY_BUFFER, g_LineVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(line_vertices), line_vertices, GL_DYNAMIC_DRAW);
     
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    // Stride = 10 floats por vértice
+    GLsizei stride = 10 * sizeof(float);
+    
+    // Atributo 0: posição (location = 0) - vec4
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
+    
+    // Atributo 1: normal (location = 1) - vec4
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, (void*)(4 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    
+    // Atributo 2: texcoord (location = 2) - vec2
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride, (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(2);
     
     // Salvar programa atual e usar o programa fornecido
     GLint current_program;

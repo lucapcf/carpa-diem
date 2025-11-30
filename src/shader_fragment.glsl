@@ -24,6 +24,7 @@ uniform mat4 projection;
 #define FISH   2  // fish como peixe
 #define BAIT   3  // FishingLure (isca)
 #define HOOK   4  // Hook (anzol)
+#define ROD    5  // Vara de pesca
 #define FISHING_LINE 6 // Linha de pesca
 
 uniform int object_id;
@@ -94,8 +95,17 @@ void main()
         uv_coords = texcoords;
         Kd0 = texture(HookTexture, uv_coords).rgb;
     }
+    else if (object_id == ROD) {
+        // Vara de pesca: cor marrom/bege 
+        uv_coords = texcoords;
+        Kd0 = vec3(0.6, 0.4, 0.2);
+    }
     else if (object_id == FISHING_LINE) {
-        Kd0 = vec3(1.0, 1.0, 1.0); // Branco puro
+        // Linha de pesca: branco puro, sem iluminação
+        color.rgb = vec3(1.0, 1.0, 1.0);
+        color.a = 1.0;
+        color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
+        return; // Sai antes do cálculo de iluminação
     }
     else {
         uv_coords = texcoords;
