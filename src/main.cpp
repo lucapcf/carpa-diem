@@ -50,6 +50,7 @@
 #include "matrices.h"
 #include "game_state.h"
 #include "game_types.h"
+#include "rod_system.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -199,7 +200,7 @@ GLint g_bbox_max_uniform;
 GLuint g_GridVAO = 0;
 GLuint g_GridVBO = 0;
 int g_GridVertexCount = 0;
-bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid
+bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid 
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -219,11 +220,37 @@ void LoadGameResources();
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection);
 void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection);
 
+//DEBUG TIRAR DEPOIS
+// Variáveis para debug da posição da vara
+glm::vec3 g_RodDebugOffset = glm::vec3(-0.250f, -0.220f, 0.320f);
+float g_RodDebugStep = 0.01f;
+
+// Variáveis para debug da ponta da vara (onde a linha começa)
+glm::vec4 g_RodTipDebug = glm::vec4(4.0f, 41.0f, 4.0f, 1.0f);
+float g_RodTipDebugStep = 1.0f;
+
 // =====================================================================
 // Funções auxiliares do jogo
 // =====================================================================
 
+// Constantes para a linha de pesca
+const glm::vec3 g_RodOffset = glm::vec3(-0.250f, -0.220f, 0.320f);
 
+// Função para calcular a posição da ponta da vara no mundo
+glm::vec3 GetRodTipPosition() {
+    float corrected_rotation = g_Boat.rotation_y + g_CameraTheta;
+    
+    // Replicar a matriz de transformação da vara usada no render loop
+    glm::mat4 model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z)
+          * Matrix_Rotate_Y(corrected_rotation)
+          * Matrix_Translate(g_RodOffset.x, g_RodOffset.y, g_RodOffset.z)
+          * Matrix_Rotate_Y(-M_PI_2)
+          * Matrix_Rotate_Z(-M_PI / 6.0f)
+          * Matrix_Scale(0.08f, 0.08f, 0.08f);
+          
+    glm::vec4 tip_world = model * g_RodTipDebug;  // Usando variável de debug
+    return glm::vec3(tip_world);
+}
 
 // Função para inicializar o grid das zonas de pesca
 void InitializeFishingGrid() {
@@ -520,6 +547,9 @@ int main(int argc, char* argv[])
     SetupCallbacks(window);
 
     LoadGameResources();
+
+    // Inicializar sistema de varas (carrega modelos 3D)
+    InitializeRodSystem();
 
     if ( argc > 1 )
     {
@@ -1162,38 +1192,63 @@ double g_LastCursorPosX, g_LastCursorPosY;
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && 
-        g_CurrentGameState == FISHING_PHASE)    
+    if (button == GLFW_MOUSE_BUTTON_LEFT && g_CurrentGameState == FISHING_PHASE)    
     {
-        // Lançar isca
-        if (g_CurrentCamera != DEBUG_CAMERA && !g_Bait.is_launched) {
+        // Se estivermos na câmera de debug, mantemos o comportamento original de rotação
+        if (g_CurrentCamera == DEBUG_CAMERA) {
+            if (action == GLFW_PRESS) {
+                glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+                g_LeftMouseButtonPressed = true;
+            } else if (action == GLFW_RELEASE) {
+                g_LeftMouseButtonPressed = false;
+            }
+        }
+        // Se estivermos na câmera de jogo, usamos o sistema de carga da vara
+        else {
+            // PRESSIONOU: Começa a carregar ou recolhe se já estiver na água
+            if (action == GLFW_PRESS) 
+            {
+                // Se a isca já está na água, recolhe imediatamente
+                if (g_Bait.is_in_water) {
+                    g_Bait.is_launched = false;
+                    g_Bait.is_in_water = false;
+                    g_Bait.velocity = glm::vec3(0.0f, 0.0f, 0.0f);
+                    // Reposicionar isca na ponta da vara
+                    g_Bait.position = GetRodTipPosition();
+                    printf("Isca recolhida!\n");
+                }
+                // Se a isca está pronta para lançar, começa a carregar via RodSystem
+                else if (!g_Bait.is_launched) {
+                    StartChargingThrow();
+                }
+            }
+            
+            // SOLTOU: Realiza o lançamento com a força calculada pelo RodSystem
+            else if (action == GLFW_RELEASE)
+            {
+                if (IsCharging()) {
+                    float throw_power = ReleaseThrow(); // Pega a força calculada
 
-            g_Bait.is_launched = true;
-            g_Bait.is_in_water = false;
-            
-            // Configurar posição inicial da isca
-            g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
-            
-            // Configurar velocidade inicial da isca baseada na direção da câmera
-            float launch_x = camera_view_vector.x;
-            float launch_z = camera_view_vector.z;
-            g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
-            
-            printf("Isca lançada!\n");
-        }
-        
-        // Câmera debug: guardar posição do cursor para rotação
-        else if (g_CurrentCamera == DEBUG_CAMERA) {
-            glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
-            g_LeftMouseButtonPressed = true;
+                    if (!g_Bait.is_launched) {
+                        g_Bait.is_launched = true;
+                        g_Bait.is_in_water = false;
+                        
+                        // Configurar posição inicial da isca
+                        g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
+                        
+                        // Configurar velocidade inicial usando a força retornada
+                        float launch_x = camera_view_vector.x;
+                        float launch_z = camera_view_vector.z;
+                        
+                        g_Bait.velocity = glm::vec3(launch_x * throw_power, -1.0f, launch_z * throw_power);
+                        printf("Isca lançada com força: %.2f\n", throw_power);
+                    }
+                }
+                g_LeftMouseButtonPressed = false;
+            }
         }
     }
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
-    {
-        // Quando o usuário soltar o botão esquerdo do mouse, atualizamos a
-        // variável abaixo para false.
-        g_LeftMouseButtonPressed = false;
-    }
+    
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
@@ -1380,6 +1435,39 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
+    }
+    //DEBUG TIRAR DEPOIS   
+    // Controles de debug para ajustar posição da PONTA DA VARA (onde a linha começa)
+    if (g_CurrentGameState == FISHING_PHASE) {
+        // I/K - Ajustar X da ponta da vara
+        if (key == GLFW_KEY_I && action == GLFW_PRESS) {
+            g_RodTipDebug.x += g_RodTipDebugStep;
+            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
+        }
+        if (key == GLFW_KEY_K && action == GLFW_PRESS) {
+            g_RodTipDebug.x -= g_RodTipDebugStep;
+            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
+        }
+        
+        // J/L - Ajustar Y da ponta da vara (altura)
+        if (key == GLFW_KEY_J && action == GLFW_PRESS) {
+            g_RodTipDebug.y -= g_RodTipDebugStep;
+            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
+        }
+        if (key == GLFW_KEY_L && action == GLFW_PRESS) {
+            g_RodTipDebug.y += g_RodTipDebugStep;
+            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
+        }
+        
+        // U/O - Ajustar Z da ponta da vara (frente/trás)
+        if (key == GLFW_KEY_U && action == GLFW_PRESS) {
+            g_RodTipDebug.z += g_RodTipDebugStep;
+            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
+        }
+        if (key == GLFW_KEY_O && action == GLFW_PRESS) {
+            g_RodTipDebug.z -= g_RodTipDebugStep;
+            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
+        }
     }
 }
 

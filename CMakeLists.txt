@@ -12,6 +12,8 @@ set(SOURCES
   src/stb_image.cpp
   src/glad.c
   src/game_state.cpp
+  src/rod_system.cpp
+  src/fish_system.cpp
 )
 
 cmake_minimum_required(VERSION 3.5.0)
