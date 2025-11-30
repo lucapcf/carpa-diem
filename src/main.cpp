@@ -1907,6 +1907,14 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, FISH);
         DrawVirtualObject("fish_Cube");
+        
+        // Desenhamos o peixe com movimento aleatório (segundo peixe)
+        model = Matrix_Translate(g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z) 
+                * Matrix_Rotate_Y(g_RandomFish.rotation_y)
+                * Matrix_Scale(0.1f, 0.1f, 0.1f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, FISH);
+        DrawVirtualObject("fish_Cube");
 
         if (g_Bait.is_launched) {
             // Desenhamos a isca
