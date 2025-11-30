@@ -1838,6 +1838,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     #define FISH          2
     #define BAIT          3
     #define HOOK          4
+    #define ROD           5
 
     // Desenhamos o mapa
     glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
@@ -1859,6 +1860,41 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     DrawVirtualObject("boat01");
 
     if (g_CurrentGameState == FISHING_PHASE) {
+        // Renderizar vara de pesca (presa à câmera como em FPS)
+        if (g_CurrentCamera == GAME_CAMERA) {
+            // Posição da vara relativa à câmera (à direita e abaixo da visão)
+            glm::vec3 rod_offset = g_RodDebugOffset;
+            
+            // Rotação da câmera
+            float corrected_rotation = g_Boat.rotation_y + g_CameraTheta;
+            
+            // Transformação da vara: posicionar relativo à câmera
+            model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z)
+                  * Matrix_Rotate_Y(corrected_rotation)
+                  * Matrix_Translate(g_RodOffset.x, g_RodOffset.y, g_RodOffset.z)
+                  * Matrix_Rotate_Y(-M_PI_2)  // Ajustar orientação da vara
+                  * Matrix_Rotate_Z(-M_PI / 6.0f)  // Inclinar vara
+                  * Matrix_Scale(0.08f, 0.08f, 0.08f);
+            
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, ROD);
+            DrawVirtualObject("Fishing_Pole_Circle.001");
+            
+            // Desenhar linha de pesca
+            FishingLineRenderInfo line_render_info;
+            line_render_info.program_id = g_GpuProgramID;
+            line_render_info.model_uniform = g_model_uniform;
+            line_render_info.object_id_uniform = g_object_id_uniform;
+            line_render_info.bbox_min_uniform = g_bbox_min_uniform;
+            line_render_info.bbox_max_uniform = g_bbox_max_uniform;
+            
+            glm::vec3 rod_tip = GetRodTipPosition();
+            
+            // Se a isca não está lançada, a linha fica recolhida na ponta da vara
+            glm::vec3 line_end = g_Bait.is_launched ? g_Bait.position : rod_tip;
+            DrawFishingLine(rod_tip, line_end, line_render_info);
+        }
+        
         // Desenhamos o peixe
         model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
                 * Matrix_Rotate_Y(g_Fish.rotation_y)
@@ -1906,7 +1942,28 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
         TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
         if (g_CurrentGameState == FISHING_PHASE) {
-            TextRendering_PrintString(window, "Botao Esquerdo Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
+            TextRendering_PrintString(window, "Segure Botao Esquerdo - Carregar Lancamento", -1.0f, 0.2f, 1.0f);
+            
+            // Mostrar barra de força se estiver carregando
+            if (IsCharging()) {
+                float charge = GetCurrentChargePercentage();
+                std::string charge_bar = "Forca: [";
+                int bars = (int)(charge * 20.0f);
+                for (int i = 0; i < 20; i++) {
+                    if (i < bars) charge_bar += "|";
+                    else charge_bar += ".";
+                }
+                charge_bar += "]";
+                
+                TextRendering_PrintString(window, charge_bar, -0.3f, 0.0f, 2.0f);
+            }
+            
+            // Debug da posição da vara
+            char rod_debug[100];
+            snprintf(rod_debug, sizeof(rod_debug), "Rod Offset: X=%.3f Y=%.3f Z=%.3f", 
+                     g_RodDebugOffset.x, g_RodDebugOffset.y, g_RodDebugOffset.z);
+            TextRendering_PrintString(window, rod_debug, -1.0f, -0.2f, 1.0f);
+            TextRendering_PrintString(window, "I/K - X  J/L - Y  U/O - Z  (Step: 0.01)", -1.0f, -0.3f, 1.0f);
         }
         
         // Mostrar tipo de câmera ativa
