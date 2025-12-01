@@ -354,7 +354,7 @@ glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2
 
 // Função para configurar câmera top-down (Fase Navegação)
 void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
-    camera_position = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
+    camera_position = glm::vec4(0.0f, 40.0f, 0.0f, 1.0f);
     glm::vec4 camera_view_vector = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     
