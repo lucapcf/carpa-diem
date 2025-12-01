@@ -50,8 +50,6 @@
 #include "matrices.h"
 #include "game_state.h"
 #include "game_types.h"
-#include "rod_system.h"
-#include "fish_system.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -159,6 +157,7 @@ struct SceneObject
     GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
     glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
     glm::vec3    bbox_max;
+    glm::vec3    material_kd; // Cor difusa do material (do arquivo .mtl)
 };
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
@@ -196,12 +195,13 @@ GLint g_projection_uniform;
 GLint g_object_id_uniform;
 GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
+GLint g_material_kd_uniform;
 
 // Grid variables para desenhar linhas das zonas de pesca
 GLuint g_GridVAO = 0;
 GLuint g_GridVBO = 0;
 int g_GridVertexCount = 0;
-bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid 
+bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -221,37 +221,11 @@ void LoadGameResources();
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection);
 void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection);
 
-//DEBUG TIRAR DEPOIS
-// Variáveis para debug da posição da vara
-glm::vec3 g_RodDebugOffset = glm::vec3(-0.250f, -0.220f, 0.320f);
-float g_RodDebugStep = 0.01f;
-
-// Variáveis para debug da ponta da vara (onde a linha começa)
-glm::vec4 g_RodTipDebug = glm::vec4(4.0f, 41.0f, 4.0f, 1.0f);
-float g_RodTipDebugStep = 1.0f;
-
 // =====================================================================
 // Funções auxiliares do jogo
 // =====================================================================
 
-// Constantes para a linha de pesca
-const glm::vec3 g_RodOffset = glm::vec3(-0.250f, -0.220f, 0.320f);
 
-// Função para calcular a posição da ponta da vara no mundo
-glm::vec3 GetRodTipPosition() {
-    float corrected_rotation = g_Boat.rotation_y + g_CameraTheta;
-    
-    // Replicar a matriz de transformação da vara usada no render loop
-    glm::mat4 model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z)
-          * Matrix_Rotate_Y(corrected_rotation)
-          * Matrix_Translate(g_RodOffset.x, g_RodOffset.y, g_RodOffset.z)
-          * Matrix_Rotate_Y(-M_PI_2)
-          * Matrix_Rotate_Z(-M_PI / 6.0f)
-          * Matrix_Scale(0.08f, 0.08f, 0.08f);
-          
-    glm::vec4 tip_world = model * g_RodTipDebug;  // Usando variável de debug
-    return glm::vec3(tip_world);
-}
 
 // Função para inicializar o grid das zonas de pesca
 void InitializeFishingGrid() {
@@ -433,7 +407,7 @@ void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
     float x = r * cos(g_CameraPhi) * sin(g_CameraTheta);
     
     camera_position = glm::vec4(x, y, z, 1.0f);
-    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 1.0f); // Olha para o centro da cena
+    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 0.0f); // Olha para o centro da cena
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
     view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
@@ -481,9 +455,6 @@ void UpdateGamePhysics(float deltaTime) {
         if (length(movement_direction) > 0.001f) {
             g_Fish.rotation_y = atan2(movement_direction.x, movement_direction.z);
         }
-        
-        // Atualizar o peixe com movimento aleatório
-        UpdateRandomFish(deltaTime);
         
         if (g_Bait.is_launched){
             // Atualizar física da isca
@@ -552,9 +523,6 @@ int main(int argc, char* argv[])
 
     LoadGameResources();
 
-    // Inicializar sistema de varas (carrega modelos 3D)
-    InitializeRodSystem();
-
     if ( argc > 1 )
     {
         ObjModel model(argv[1]);
@@ -607,8 +575,6 @@ int main(int argc, char* argv[])
         glm::mat4 view;
         glm::vec4 camera_position;
         glm::mat4 projection;
-        float nearplane = -0.1f;
-        float farplane  = -100.0f;
 
         UpdateCameras(view, camera_position, projection);
   
@@ -705,6 +671,10 @@ void DrawVirtualObject(const char* object_name)
     glUniform4f(g_bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f);
     glUniform4f(g_bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
 
+    // Setamos a cor do material do arquivo .mtl
+    glm::vec3 material_kd = g_VirtualScene[object_name].material_kd;
+    glUniform3f(g_material_kd_uniform, material_kd.x, material_kd.y, material_kd.z);
+
     // Pedimos para a GPU rasterizar os vértices dos eixos XYZ
     // apontados pelo VAO como linhas. Veja a definição de
     // g_VirtualScene[""] dentro da função BuildTrianglesAndAddToVirtualScene(), e veja
@@ -746,6 +716,7 @@ void LoadShadersFromFiles()
     g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); // Variável "object_id" em shader_fragment.glsl
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_material_kd_uniform = glGetUniformLocation(g_GpuProgramID, "material_kd"); // Cor difusa do material
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
@@ -963,7 +934,28 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
 
-        g_VirtualScene[model->shapes[shape].name] = theobject;
+        // Obtém a cor do material do arquivo .mtl
+        int material_id = model->shapes[shape].mesh.material_ids.empty() ? -1 : model->shapes[shape].mesh.material_ids[0];
+        if (material_id >= 0 && material_id < model->materials.size()) {
+            theobject.material_kd = glm::vec3(
+                model->materials[material_id].diffuse[0],
+                model->materials[material_id].diffuse[1],
+                model->materials[material_id].diffuse[2]
+            );
+        } else {
+            // Cor padrão caso não tenha material
+            theobject.material_kd = glm::vec3(0.8f, 0.8f, 0.8f);
+        }
+
+        // Se o nome já existe, adiciona um sufixo único
+        std::string object_name = model->shapes[shape].name;
+        int suffix = 0;
+        while (g_VirtualScene.find(object_name) != g_VirtualScene.end()) {
+            suffix++;
+            object_name = model->shapes[shape].name + "_" + std::to_string(suffix);
+        }
+        theobject.name = object_name;
+        g_VirtualScene[object_name] = theobject;
     }
 
     GLuint VBO_model_coefficients_id;
@@ -1198,63 +1190,38 @@ double g_LastCursorPosX, g_LastCursorPosY;
 // Função callback chamada sempre que o usuário aperta algum dos botões do mouse
 void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && g_CurrentGameState == FISHING_PHASE)    
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS && 
+        g_CurrentGameState == FISHING_PHASE)    
     {
-        // Se estivermos na câmera de debug, mantemos o comportamento original de rotação
-        if (g_CurrentCamera == DEBUG_CAMERA) {
-            if (action == GLFW_PRESS) {
-                glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
-                g_LeftMouseButtonPressed = true;
-            } else if (action == GLFW_RELEASE) {
-                g_LeftMouseButtonPressed = false;
-            }
-        }
-        // Se estivermos na câmera de jogo, usamos o sistema de carga da vara
-        else {
-            // PRESSIONOU: Começa a carregar ou recolhe se já estiver na água
-            if (action == GLFW_PRESS) 
-            {
-                // Se a isca já está na água, recolhe imediatamente
-                if (g_Bait.is_in_water) {
-                    g_Bait.is_launched = false;
-                    g_Bait.is_in_water = false;
-                    g_Bait.velocity = glm::vec3(0.0f, 0.0f, 0.0f);
-                    // Reposicionar isca na ponta da vara
-                    g_Bait.position = GetRodTipPosition();
-                    printf("Isca recolhida!\n");
-                }
-                // Se a isca está pronta para lançar, começa a carregar via RodSystem
-                else if (!g_Bait.is_launched) {
-                    StartChargingThrow();
-                }
-            }
-            
-            // SOLTOU: Realiza o lançamento com a força calculada pelo RodSystem
-            else if (action == GLFW_RELEASE)
-            {
-                if (IsCharging()) {
-                    float throw_power = ReleaseThrow(); // Pega a força calculada
+        // Lançar isca
+        if (g_CurrentCamera != DEBUG_CAMERA && !g_Bait.is_launched) {
 
-                    if (!g_Bait.is_launched) {
-                        g_Bait.is_launched = true;
-                        g_Bait.is_in_water = false;
-                        
-                        // Configurar posição inicial da isca
-                        g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
-                        
-                        // Configurar velocidade inicial usando a força retornada
-                        float launch_x = camera_view_vector.x;
-                        float launch_z = camera_view_vector.z;
-                        
-                        g_Bait.velocity = glm::vec3(launch_x * throw_power, -1.0f, launch_z * throw_power);
-                        printf("Isca lançada com força: %.2f\n", throw_power);
-                    }
-                }
-                g_LeftMouseButtonPressed = false;
-            }
+            g_Bait.is_launched = true;
+            g_Bait.is_in_water = false;
+            
+            // Configurar posição inicial da isca
+            g_Bait.position = glm::vec3(g_Boat.position.x, g_Boat.position.y + 0.5f, g_Boat.position.z);
+            
+            // Configurar velocidade inicial da isca baseada na direção da câmera
+            float launch_x = camera_view_vector.x;
+            float launch_z = camera_view_vector.z;
+            g_Bait.velocity = glm::vec3(launch_x * 10.0f, -1.0f, launch_z * 10.0f);
+            
+            printf("Isca lançada!\n");
+        }
+        
+        // Câmera debug: guardar posição do cursor para rotação
+        else if (g_CurrentCamera == DEBUG_CAMERA) {
+            glfwGetCursorPos(window, &g_LastCursorPosX, &g_LastCursorPosY);
+            g_LeftMouseButtonPressed = true;
         }
     }
-    
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    {
+        // Quando o usuário soltar o botão esquerdo do mouse, atualizamos a
+        // variável abaixo para false.
+        g_LeftMouseButtonPressed = false;
+    }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
@@ -1404,11 +1371,12 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
                 
-                // Gerar nova rota aleatória para o peixe
-                GenerateFishRoute(current_area);
-                
-                // Gerar o peixe com movimento aleatório
-                SpawnRandomFish(current_area);
+                // Configurar curva de Bézier do peixe baseada na área atual
+                glm::vec3 area_center = g_MapAreas[current_area].center;
+                g_FishBezierPoints[0] = area_center + glm::vec3(-1.0f, -0.5f, -1.0f);
+                g_FishBezierPoints[1] = area_center + glm::vec3(-0.5f, -0.5f, 1.0f);
+                g_FishBezierPoints[2] = area_center + glm::vec3(0.5f, -0.5f, -1.0f);
+                g_FishBezierPoints[3] = area_center + glm::vec3(1.0f, -0.5f, 1.0f);
 
                 // Configurar câmera para começar na frente do barco
                 FirstPersonCameraConfig(window);
@@ -1440,39 +1408,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
-    }
-    //DEBUG TIRAR DEPOIS   
-    // Controles de debug para ajustar posição da PONTA DA VARA (onde a linha começa)
-    if (g_CurrentGameState == FISHING_PHASE) {
-        // I/K - Ajustar X da ponta da vara
-        if (key == GLFW_KEY_I && action == GLFW_PRESS) {
-            g_RodTipDebug.x += g_RodTipDebugStep;
-            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
-        }
-        if (key == GLFW_KEY_K && action == GLFW_PRESS) {
-            g_RodTipDebug.x -= g_RodTipDebugStep;
-            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
-        }
-        
-        // J/L - Ajustar Y da ponta da vara (altura)
-        if (key == GLFW_KEY_J && action == GLFW_PRESS) {
-            g_RodTipDebug.y -= g_RodTipDebugStep;
-            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
-        }
-        if (key == GLFW_KEY_L && action == GLFW_PRESS) {
-            g_RodTipDebug.y += g_RodTipDebugStep;
-            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
-        }
-        
-        // U/O - Ajustar Z da ponta da vara (frente/trás)
-        if (key == GLFW_KEY_U && action == GLFW_PRESS) {
-            g_RodTipDebug.z += g_RodTipDebugStep;
-            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
-        }
-        if (key == GLFW_KEY_O && action == GLFW_PRESS) {
-            g_RodTipDebug.z -= g_RodTipDebugStep;
-            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
-        }
     }
 }
 
@@ -1798,9 +1733,13 @@ void LoadGameResources()
     ComputeNormals(&boatmodel);
     BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
-    ObjModel planemodel("../../data/plane.obj");
-    ComputeNormals(&planemodel);
-    BuildTrianglesAndAddToVirtualScene(&planemodel);
+    ObjModel terrainmodel("../../data/terrain.obj", "../../data/");
+    ComputeNormals(&terrainmodel);
+    BuildTrianglesAndAddToVirtualScene(&terrainmodel);
+
+    ObjModel watermodel("../../data/water.obj", "../../data/");
+    ComputeNormals(&watermodel);
+    BuildTrianglesAndAddToVirtualScene(&watermodel);
 
     ObjModel fishmodel("../../data/fish.obj");
     ComputeNormals(&fishmodel);
@@ -1843,13 +1782,31 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     #define FISH          2
     #define BAIT          3
     #define HOOK          4
-    #define ROD           5
+    #define TREE          5
+    #define WATER         6
 
-    // Desenhamos o mapa
-    glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
+    // Desenhamos o terreno
+    glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
     glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
     glUniform1i(g_object_id_uniform, MAP);
-    DrawVirtualObject("the_plane");
+    DrawVirtualObject("Landscape.005");
+
+    // Desenhamos as árvores (agora com nomes únicos Tree_1, Tree_2, etc.)
+    for (int i = 1; i <= 500; i++) {
+        std::string tree_name = "Tree_" + std::to_string(i);
+        if (g_VirtualScene.find(tree_name) != g_VirtualScene.end()) {
+            model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, TREE);
+            DrawVirtualObject(tree_name.c_str());
+        }
+    }
+
+    // Desenhamos a água
+    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, WATER);
+    DrawVirtualObject("Landscape_plane.002");
 
     // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
     if (g_CurrentGameState == NAVIGATION_PHASE) {
@@ -1865,52 +1822,9 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     DrawVirtualObject("boat01");
 
     if (g_CurrentGameState == FISHING_PHASE) {
-        // Renderizar vara de pesca (presa à câmera como em FPS)
-        if (g_CurrentCamera == GAME_CAMERA) {
-            // Posição da vara relativa à câmera (à direita e abaixo da visão)
-            glm::vec3 rod_offset = g_RodDebugOffset;
-            
-            // Rotação da câmera
-            float corrected_rotation = g_Boat.rotation_y + g_CameraTheta;
-            
-            // Transformação da vara: posicionar relativo à câmera
-            model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z)
-                  * Matrix_Rotate_Y(corrected_rotation)
-                  * Matrix_Translate(g_RodOffset.x, g_RodOffset.y, g_RodOffset.z)
-                  * Matrix_Rotate_Y(-M_PI_2)  // Ajustar orientação da vara
-                  * Matrix_Rotate_Z(-M_PI / 6.0f)  // Inclinar vara
-                  * Matrix_Scale(0.08f, 0.08f, 0.08f);
-            
-            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-            glUniform1i(g_object_id_uniform, ROD);
-            DrawVirtualObject("Fishing_Pole_Circle.001");
-            
-            // Desenhar linha de pesca
-            FishingLineRenderInfo line_render_info;
-            line_render_info.program_id = g_GpuProgramID;
-            line_render_info.model_uniform = g_model_uniform;
-            line_render_info.object_id_uniform = g_object_id_uniform;
-            line_render_info.bbox_min_uniform = g_bbox_min_uniform;
-            line_render_info.bbox_max_uniform = g_bbox_max_uniform;
-            
-            glm::vec3 rod_tip = GetRodTipPosition();
-            
-            // Se a isca não está lançada, a linha fica recolhida na ponta da vara
-            glm::vec3 line_end = g_Bait.is_launched ? g_Bait.position : rod_tip;
-            DrawFishingLine(rod_tip, line_end, line_render_info);
-        }
-        
         // Desenhamos o peixe
         model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
                 * Matrix_Rotate_Y(g_Fish.rotation_y)
-                * Matrix_Scale(0.1f, 0.1f, 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, FISH);
-        DrawVirtualObject("fish_Cube");
-        
-        // Desenhamos o peixe com movimento aleatório (segundo peixe)
-        model = Matrix_Translate(g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z) 
-                * Matrix_Rotate_Y(g_RandomFish.rotation_y)
                 * Matrix_Scale(0.1f, 0.1f, 0.1f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, FISH);
@@ -1955,28 +1869,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);
         TextRendering_PrintString(window, "C - Camera Livre", -1.0f, 0.4f, 1.0f);
         if (g_CurrentGameState == FISHING_PHASE) {
-            TextRendering_PrintString(window, "Segure Botao Esquerdo - Carregar Lancamento", -1.0f, 0.2f, 1.0f);
-            
-            // Mostrar barra de força se estiver carregando
-            if (IsCharging()) {
-                float charge = GetCurrentChargePercentage();
-                std::string charge_bar = "Forca: [";
-                int bars = (int)(charge * 20.0f);
-                for (int i = 0; i < 20; i++) {
-                    if (i < bars) charge_bar += "|";
-                    else charge_bar += ".";
-                }
-                charge_bar += "]";
-                
-                TextRendering_PrintString(window, charge_bar, -0.3f, 0.0f, 2.0f);
-            }
-            
-            // Debug da posição da vara
-            char rod_debug[100];
-            snprintf(rod_debug, sizeof(rod_debug), "Rod Offset: X=%.3f Y=%.3f Z=%.3f", 
-                     g_RodDebugOffset.x, g_RodDebugOffset.y, g_RodDebugOffset.z);
-            TextRendering_PrintString(window, rod_debug, -1.0f, -0.2f, 1.0f);
-            TextRendering_PrintString(window, "I/K - X  J/L - Y  U/O - Z  (Step: 0.01)", -1.0f, -0.3f, 1.0f);
+            TextRendering_PrintString(window, "Botao Esquerdo Mouse - Lancar Isca", -1.0f, 0.2f, 1.0f);
         }
         
         // Mostrar tipo de câmera ativa

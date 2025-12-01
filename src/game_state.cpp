@@ -1,7 +1,7 @@
 #include "game_state.h"
 
 // Constantes do mapa
-const float MAP_SCALE = 10.0f;
+const float MAP_SCALE = 30.0f;
 const float MAP_SIZE = MAP_SCALE * 2.0f;
 const float AREA_WIDTH = MAP_SIZE / 3.0f;
 const float AREA_HEIGHT = MAP_SIZE / 2.0f;
