@@ -1829,39 +1829,27 @@ void LoadGameResources()
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // TextureImage0 - EarthDayTexture
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // TextureImage1 - EarthNightTexture
-    LoadTextureImage("../../data/boat_texture.tga");                 // TextureImage2 - BoatTexture
-    LoadTextureImage("../../data/fish_texture.png");                 // TextureImage3 - FishTexture (padrão)
-    LoadTextureImage("../../data/lure_texture.png");                 // TextureImage4 - BaitTexture
-    LoadTextureImage("../../data/hook_texture.png");                 // TextureImage5 - HookTexture
-    
-    // Carrega texturas específicas dos peixes e armazena seus IDs
-    for (int i = 0; i < FISH_TYPE_COUNT; i++) {
-        if (g_FishTypes[i].texture_path != nullptr) {
-            g_FishTypes[i].texture_id = g_NumLoadedTextures;
-            LoadTextureImage(g_FishTypes[i].texture_path);
-            printf("  -> Textura do %s: ID %d\n", g_FishTypes[i].name, g_FishTypes[i].texture_id);
-        } else {
-            g_FishTypes[i].texture_id = 3; // Usa FishTexture padrão (TextureImage3)
-            printf("  -> %s usa textura padrão (ID 3)\n", g_FishTypes[i].name);
-        }
-    }
+    LoadTextureImage("../../data/textures/tc-earth_daymap_surface.jpg");
+    LoadTextureImage("../../data/textures/tc-earth_nightmap_citylights.gif");
+    LoadTextureImage("../../data/textures/boat.tga");
+    LoadTextureImage("../../data/textures/fish.png");
+    LoadTextureImage("../../data/textures/lure.png");
+    LoadTextureImage("../../data/textures/hook.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel baitmodel("../../data/bait.obj");
+    ObjModel baitmodel("../../data/models/bait.obj");
     ComputeNormals(&baitmodel);
     BuildTrianglesAndAddToVirtualScene(&baitmodel);
 
-    ObjModel boatmodel("../../data/boat.obj");
+    ObjModel boatmodel("../../data/models/boat.obj");
     ComputeNormals(&boatmodel);
     BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
-    ObjModel planemodel("../../data/plane.obj");
+    ObjModel planemodel("../../data/models/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
-    ObjModel fishmodel("../../data/fish.obj");
+    ObjModel fishmodel("../../data/models/fish.obj");
     ComputeNormals(&fishmodel);
     BuildTrianglesAndAddToVirtualScene(&fishmodel);
     

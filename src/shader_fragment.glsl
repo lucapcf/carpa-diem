@@ -22,14 +22,13 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define MAP    0  // Plane como mapa
-#define BOAT   1  // Boat.obj como barco
-#define FISH   2  // fish como peixe
-#define BAIT   3  // FishingLure (isca)
-#define HOOK   4  // Hook (anzol)
-#define ROD    5  // Vara de pesca
-#define FISHING_LINE 6 // Linha de pesca
-
+#define MAP             0 
+#define BOAT            1
+#define FISH            2
+#define BAIT            3
+#define HOOK            4
+#define ROD             5
+#define FISHING_LINE    6
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
