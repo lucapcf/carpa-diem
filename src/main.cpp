@@ -176,6 +176,7 @@ float g_ScreenRatio = 1.0f;
 bool g_LeftMouseButtonPressed = false;
 bool g_RightMouseButtonPressed = false; // Análogo para botão direito do mouse
 bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mouse
+
 // Variáveis que definem a câmera em coordenadas esféricas, controladas pelo
 // usuário através do mouse (veja função CursorPosCallback()). A posição
 // efetiva da câmera é calculada dentro da função main(), dentro do loop de
@@ -183,6 +184,11 @@ bool g_MiddleMouseButtonPressed = false; // Análogo para botão do meio do mous
 float g_CameraTheta = 0.0f; // Ângulo no plano ZX em relação ao eixo Z
 float g_CameraPhi = 0.0f;   // Ângulo em relação ao eixo Y
 float g_CameraDistance = 3.5f; // Distância da câmera para a origem
+glm::vec3 g_DebugCameraPos = glm::vec3(0.0f, 3.0f, 5.0f);
+float g_DebugCameraSpeed = 5.0f;
+bool g_Q_pressed = false;
+bool g_E_pressed = false;
+bool g_DebugFirstMouse = true;
 
 // Variável que controla se o texto informativo será mostrado na tela.
 bool g_ShowInfoText = true;
@@ -384,25 +390,46 @@ void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
 
 // Função para configurar câmera livre (Debug)
 void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
-    // Câmera livre em coordenadas esféricas
-    float r = g_CameraDistance;
-    float y = r * sin(g_CameraPhi);
-    float z = r * cos(g_CameraPhi) * cos(g_CameraTheta);
-    float x = r * cos(g_CameraPhi) * sin(g_CameraTheta);
-    
-    camera_position = glm::vec4(x, y, z, 1.0f);
-    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 0.0f); // Olha para o centro da cena
+    float yaw = g_CameraTheta;
+    float pitch = g_CameraPhi;
+
+    glm::vec3 forward;
+    forward.x =  sin(yaw) * cos(pitch);
+    forward.y =  sin(pitch);
+    forward.z =  cos(yaw) * cos(pitch);
+    forward = glm::normalize(forward);
+
+    camera_position = glm::vec4(g_DebugCameraPos, 1.0f);
+    camera_view_vector = glm::vec4(forward, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
-    
+
     view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
 }
 
 // Função para atualizar a física do jogo
 void UpdateGamePhysics(float deltaTime) {
-    if (g_CurrentGameState == NAVIGATION_PHASE) {
+    if (g_CurrentCamera == DEBUG_CAMERA) {
+        float yaw = g_CameraTheta;
+        glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+        glm::vec3 forwardYaw = glm::normalize(glm::vec3(sin(yaw), 0.0f, cos(yaw)));
+        glm::vec3 right = glm::normalize(glm::cross(forwardYaw, up));
+
+        glm::vec3 movement(0.0f);
+        if (g_W_pressed) movement += forwardYaw;
+        if (g_S_pressed) movement -= forwardYaw;
+        if (g_D_pressed) movement += right;
+        if (g_A_pressed) movement -= right;
+        if (g_E_pressed) movement += up;
+        if (g_Q_pressed) movement -= up;
+
+        if (glm::length(movement) > 0.0f) {
+            movement = glm::normalize(movement) * g_DebugCameraSpeed * deltaTime;
+            g_DebugCameraPos += movement;
+        }
+    }
+
+    if (g_CurrentGameState == NAVIGATION_PHASE && g_CurrentCamera != DEBUG_CAMERA) {
         glm::vec3 old_position = g_Boat.position;
-        
-        // Atualizar movimento do barco
         float boat_speed = g_Boat.speed * deltaTime;
         if (g_W_pressed) {
             g_Boat.position.x -= sin(g_Boat.rotation_y) * boat_speed;
@@ -1248,9 +1275,8 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 
 
 void UpdateCameraAngles(double dx, double dy, float sensitivity) {
-    // Atualizamos parâmetros da câmera com os deslocamentos
     g_CameraTheta -= sensitivity * dx;
-    g_CameraPhi   += sensitivity * dy;
+    g_CameraPhi   -= sensitivity * dy;
 
     // Em coordenadas esféricas, o ângulo phi deve ficar entre -pi/2 e +pi/2.
     float phimax = 3.141592f/2;
@@ -1267,6 +1293,25 @@ void UpdateCameraAngles(double dx, double dy, float sensitivity) {
 // cima da janela OpenGL.
 void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
 {
+    if (g_CurrentCamera == DEBUG_CAMERA)
+    {
+        if (g_DebugFirstMouse) {
+            g_LastCursorPosX = xpos;
+            g_LastCursorPosY = ypos;
+            g_DebugFirstMouse = false;
+            return;
+        }
+
+        double dx = xpos - g_LastCursorPosX;
+        double dy = ypos - g_LastCursorPosY;
+
+        g_LastCursorPosX = xpos;
+        g_LastCursorPosY = ypos;
+
+        UpdateCameraAngles(dx, dy, 0.001f);
+        return;
+    }
+
     // Câmera FPS na fase de pesca (cursor desabilitado)
     if (g_CurrentGameState == FISHING_PHASE)
     {
@@ -1285,23 +1330,10 @@ void CursorPosCallback(GLFWwindow* window, double xpos, double ypos)
         g_FishingLastCursorX = xpos;
         g_FishingLastCursorY = ypos;
         
-        UpdateCameraAngles(dx, dy, 0.002f);
+        // Inverte dy para que mover mouse para cima olhe para cima
+        UpdateCameraAngles(dx, -dy, 0.001f);
         
         return;
-    }
-    
-    // Câmera debug (modo livre com botão do mouse)
-    if (g_LeftMouseButtonPressed)
-    {
-        // Calcular deslocamento desde última posição
-        float dx = xpos - g_LastCursorPosX;
-        float dy = ypos - g_LastCursorPosY;
-        
-        // Atualizar última posição
-        g_LastCursorPosX = xpos;
-        g_LastCursorPosY = ypos;
-        
-        UpdateCameraAngles(dx, dy, 0.01f);
     }
 }
 
@@ -1350,6 +1382,14 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
         if (action == GLFW_PRESS) g_D_pressed = true;
         else if (action == GLFW_RELEASE) g_D_pressed = false;
     }
+    if (key == GLFW_KEY_Q) {
+        if (action == GLFW_PRESS) g_Q_pressed = true;
+        else if (action == GLFW_RELEASE) g_Q_pressed = false;
+    }
+    if (key == GLFW_KEY_E) {
+        if (action == GLFW_PRESS) g_E_pressed = true;
+        else if (action == GLFW_RELEASE) g_E_pressed = false;
+    }
     // Alternar entre fases com Enter
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
         if (g_CurrentGameState == NAVIGATION_PHASE) {
@@ -1387,9 +1427,17 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_C && action == GLFW_PRESS) {
         if (g_CurrentCamera == GAME_CAMERA) {
             g_CurrentCamera = DEBUG_CAMERA;
-            printf("Câmera Debug ativada - Use mouse para controlar\n");
+            g_DebugCameraPos = glm::vec3(g_Boat.position.x, g_Boat.position.y + 2.0f, g_Boat.position.z + 5.0f);
+
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            int w, h; glfwGetFramebufferSize(window, &w, &h);
+            glfwSetCursorPos(window, w/2.0, h/2.0);
+            g_DebugFirstMouse = true;
+
+            printf("Câmera Debug ativada - mouse-look ativo, use WASD to move, Q/E up-down\n");
         } else {
             g_CurrentCamera = GAME_CAMERA;
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
             printf("Câmera do jogo ativada\n");
         }
     }
