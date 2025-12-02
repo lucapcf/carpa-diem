@@ -25,7 +25,7 @@ FishTypeInfo g_FishTypes[FISH_TYPE_COUNT] = {
 // =====================================================================
 // Configurações da área de natação do peixe
 // =====================================================================
-static const float SWIM_DEPTH_MIN  = -1.5f;
+static const float SWIM_DEPTH_MIN  = -0.5f;
 static const float SWIM_DEPTH_MAX  = -0.3f;
 static const float MIN_MOVE_DISTANCE = 1.0f;
 static const float MAX_MOVE_DISTANCE = 3.0f;
@@ -35,7 +35,7 @@ static const float GRID_MAX_X =  10.0f - GRID_MARGIN;
 static const float GRID_MIN_Z = -10.0f + GRID_MARGIN;
 static const float GRID_MAX_Z =  10.0f - GRID_MARGIN;
 static const float ARRIVAL_THRESHOLD = 0.3f;
-static const float HOOK_RADIUS = 1.0f;
+static const float HOOK_RADIUS = 2.0f;
 
 static bool g_RandomInitialized = false;
 static glm::vec3 g_FishDestination;

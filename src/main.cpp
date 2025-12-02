@@ -524,9 +524,11 @@ void UpdateGamePhysics(float deltaTime) {
                 SpawnRandomFish(area);
             }
             else if (result == HOOK_FISH_ESCAPED) {
-                // Peixe escapou, gera um novo
-                MapArea area = GetCurrentArea(g_Boat.position);
-                SpawnRandomFish(area);
+                // Peixe escapou, volta para navegação
+                printf("Peixe escapou! Voltando para navegacao...\n");
+                g_CurrentGameState = NAVIGATION_PHASE;
+                g_Bait.is_launched = false;
+                g_Bait.is_in_water = false;
             }
         }
     }
