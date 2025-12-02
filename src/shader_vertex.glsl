@@ -19,6 +19,13 @@ out vec4 position_world;
 out vec4 position_model;
 out vec4 normal;
 out vec2 texcoords;
+out vec3 gouraud_illumination;
+
+uniform int object_id;
+
+uniform sampler2D FishTexture;
+
+#define FISH 2
 
 void main()
 {
@@ -63,5 +70,39 @@ void main()
 
     // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
     texcoords = texture_coefficients;
+
+     // ***** Gouraud Shading *******
+    if(object_id == FISH){
+        // Obtemos a posição da câmera utilizando a inversa da matriz que define o
+        // sistema de coordenadas da câmera.
+        vec4 origin = vec4(0.0, 0.0, 0.0, 1.0);
+        vec4 camera_position = inverse(view) * origin;
+
+        // Posição do vértice no mundo
+        vec4 p = position_world;
+
+        // Normal do vértice normalizada
+        vec4 n = normalize(normal);
+
+        // Vetor que define o sentido da fonte de luz em relação ao vértice atual.
+        // Luz direcional vinda de cima e ligeiramente da frente
+        vec4 l = normalize(vec4(1.0, 1.0, 0.0, 0.0));
+
+        // Vetor que define o sentido da câmera em relação ao vértice atual.
+        vec4 v = normalize(camera_position - p);
+
+        // Half-vector do Blinn-Phong
+        vec4 h = normalize(l + v);
+        
+        vec3 Ks0 = vec3(0.6); // Brilho especular
+        float q = 80.0; // Expoente especular alto (brilho concentrado)
+        vec3 I = vec3(1.0, 1.0, 1.0); // Intensidade da luz branca
+
+        float lambert = max(0,dot(n,l));
+        vec3 phong_specular_term  = Ks0 * I * pow(max(dot(n, h), 0.0),q); 
+
+
+        gouraud_illumination = I * (lambert + 0.01) + (phong_specular_term);
+    }
 }
 
