@@ -110,6 +110,18 @@ void main()
         // Use material color from MTL file (passed as uniform)
         Kd0 = material_kd;
     }
+    else if (object_id == ROD) {
+        // Vara de pesca: cor marrom/bege 
+        uv_coords = texcoords;
+        Kd0 = vec3(0.6, 0.4, 0.2);
+    }
+    else if (object_id == FISHING_LINE) {
+        // Linha de pesca: branco puro, sem iluminação
+        color.rgb = vec3(1.0, 1.0, 1.0);
+        color.a = 1.0;
+        color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
+        return; // Sai antes do cálculo de iluminação
+    }
     else {
         uv_coords = texcoords;
         // Fallback: usa EarthDayTexture
@@ -138,5 +150,5 @@ void main()
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
     color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
-} 
+}
 

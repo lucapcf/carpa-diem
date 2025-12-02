@@ -95,27 +95,13 @@ void InitializeRodSystem() {
     
     // Carregar modelo 3D da vara básica
     try {
-        ObjModel fishing_pole("../../data/models/Fishing_Pole_01.obj");
+        ObjModel fishing_pole("../../data/models/fishing_pole_01.obj");
         ComputeNormals(&fishing_pole);
         BuildTrianglesAndAddToVirtualScene(&fishing_pole);
         printf("Vara básica (fishing_pole_01) carregada com sucesso!\n");
     } catch (const std::exception& e) {
         fprintf(stderr, "ERRO ao carregar fishing_pole_01: %s\n", e.what());
     }
-    
-    // Carregar modelo 3D da vara avançada (fishing_rod)
-    // AINDA NÂO IMPLEMENTADO TROCA ENTRE VARAS
-    // Descomente quando o arquivo estiver corrigido
-    /*
-    try {
-        ObjModel fishing_rod("../../data/models/fishing_rod.obj");
-        ComputeNormals(&fishing_rod);
-        BuildTrianglesAndAddToVirtualScene(&fishing_rod);
-        printf("Vara avançada (fishing_rod) carregada com sucesso!\n");
-    } catch (const std::exception& e) {
-        fprintf(stderr, "ERRO ao carregar fishing_rod: %s\n", e.what());
-    }
-    */
     
     printf("=================================================\n");
     printf("Sistema de varas inicializado!\n");

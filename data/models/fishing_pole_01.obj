@@ -1,7 +1,7 @@
 # Blender v2.78 (sub 0) OBJ File: '10.blend'
 # www.blender.org
 mtllib fishing_pole_01.mtl
-g Fishing_Pole_Circle.001
+g fishing_pole_01
 v 0.079945 -0.715122 0.475878
 v -0.036664 -0.719967 0.523936
 v -0.084965 -0.731662 0.639956
