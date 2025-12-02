@@ -48,6 +48,7 @@ uniform sampler2D HookTexture;        // TextureImage5 - Hook texture
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
+in vec3 gouraud_illumination;
 
 void main()
 {
@@ -73,12 +74,17 @@ void main()
     // Vetor que define o sentido da câmera em relação ao ponto atual.
     vec4 v = normalize(camera_position - p);
 
+    vec4 h = normalize(l + v);
+
     // Coordenadas de textura U e V
     vec2 uv_coords;
 
     // Obtemos a refletância difusa a partir da leitura da imagem de textura apropriada
-    vec3 Kd0;
-    vec3 Kd;
+    vec3 Kd0 = vec3(0.0,0.0,0.0);
+    vec3 Ks0 = vec3(0.0, 0.0, 0.0); // Coeficiente de reflexão especular
+    float q = 1000.0; // Expoente especular (alto = sem brilho)
+    vec3 I = vec3(1.0, 1.0, 1.0); // Intensidade da luz branca
+
 
     if (object_id == MAP) {
         uv_coords = texcoords;
@@ -88,10 +94,14 @@ void main()
     else if (object_id == BOAT) {
         uv_coords = texcoords;
         Kd0 = texture(BoatTexture, uv_coords).rgb;
+        Ks0 = Kd0 * 0.5;
+        q = 15.0;
     }
     else if (object_id == FISH) {
         uv_coords = texcoords;
         Kd0 = texture(FishTexture, uv_coords).rgb;
+        Ks0 = Kd0 * 0.5;
+        q = 20.0;
     }
     else if (object_id == BAIT) {
         uv_coords = texcoords;
@@ -100,6 +110,8 @@ void main()
     else if (object_id == HOOK) {
         uv_coords = texcoords;
         Kd0 = texture(HookTexture, uv_coords).rgb;
+        Ks0 = Kd0 * 0.8;
+        q = 1.0;
     }
     else if (object_id == TREE) {
         uv_coords = texcoords;
@@ -126,9 +138,17 @@ void main()
     }
     
     // Equação de Iluminação
-    float lambert = max(0,dot(n,l));
+    if (object_id == FISH) {
+        color.rgb = Kd0 *gouraud_illumination;
+    }
+    else {
+        float lambert = max(0,dot(n,l));
 
-    color.rgb = Kd0 * (lambert + 0.01);
+        vec3 phong_specular_term = Ks0 * I * pow(max(dot(n, h), 0.0), q);
+
+        color.rgb = Kd0 * (lambert + 0.01) + phong_specular_term;
+    }
+
 
     // NOTE: Se você quiser fazer o rendering de objetos transparentes, é
     // necessário:
