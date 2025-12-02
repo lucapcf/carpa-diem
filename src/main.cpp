@@ -160,6 +160,7 @@ struct SceneObject
     GLuint       vertex_array_object_id; // ID do VAO onde estão armazenados os atributos do modelo
     glm::vec3    bbox_min; // Axis-Aligned Bounding Box do objeto
     glm::vec3    bbox_max;
+    glm::vec3    material_kd; // Cor difusa do material (do arquivo .mtl)
 };
 
 // Abaixo definimos variáveis globais utilizadas em várias funções do código.
@@ -198,12 +199,13 @@ GLint g_object_id_uniform;
 GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
 GLint g_fish_texture_id_uniform; // ID da textura do peixe atual
+GLint g_material_kd_uniform;
 
 // Grid variables para desenhar linhas das zonas de pesca
 GLuint g_GridVAO = 0;
 GLuint g_GridVBO = 0;
 int g_GridVertexCount = 0;
-bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid 
+bool g_ShowGrid = true;  // Toggle para mostrar/ocultar o grid
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
@@ -223,7 +225,6 @@ void LoadGameResources();
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection);
 void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection);
 
-//DEBUG TIRAR DEPOIS
 // Variáveis para debug da posição da vara
 glm::vec3 g_RodDebugOffset = glm::vec3(-0.250f, -0.220f, 0.320f);
 float g_RodDebugStep = 0.01f;
@@ -364,7 +365,7 @@ glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2
 
 // Função para configurar câmera top-down (Fase Navegação)
 void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
-    camera_position = glm::vec4(0.0f, 15.0f, 0.0f, 1.0f);
+    camera_position = glm::vec4(0.0f, 40.0f, 0.0f, 1.0f);
     glm::vec4 camera_view_vector = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     
@@ -417,7 +418,7 @@ void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
     float x = r * cos(g_CameraPhi) * sin(g_CameraTheta);
     
     camera_position = glm::vec4(x, y, z, 1.0f);
-    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 1.0f); // Olha para o centro da cena
+    glm::vec4 camera_view_vector = glm::vec4(-x, -y, -z, 0.0f); // Olha para o centro da cena
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
     
     view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
@@ -602,8 +603,6 @@ int main(int argc, char* argv[])
         glm::mat4 view;
         glm::vec4 camera_position;
         glm::mat4 projection;
-        float nearplane = -0.1f;
-        float farplane  = -100.0f;
 
         UpdateCameras(view, camera_position, projection);
   
@@ -700,6 +699,10 @@ void DrawVirtualObject(const char* object_name)
     glUniform4f(g_bbox_min_uniform, bbox_min.x, bbox_min.y, bbox_min.z, 1.0f);
     glUniform4f(g_bbox_max_uniform, bbox_max.x, bbox_max.y, bbox_max.z, 1.0f);
 
+    // Setamos a cor do material do arquivo .mtl
+    glm::vec3 material_kd = g_VirtualScene[object_name].material_kd;
+    glUniform3f(g_material_kd_uniform, material_kd.x, material_kd.y, material_kd.z);
+
     // Pedimos para a GPU rasterizar os vértices dos eixos XYZ
     // apontados pelo VAO como linhas. Veja a definição de
     // g_VirtualScene[""] dentro da função BuildTrianglesAndAddToVirtualScene(), e veja
@@ -742,6 +745,7 @@ void LoadShadersFromFiles()
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
     g_fish_texture_id_uniform = glGetUniformLocation(g_GpuProgramID, "fish_texture_id"); // ID da textura do peixe
+    g_material_kd_uniform = glGetUniformLocation(g_GpuProgramID, "material_kd"); // Cor difusa do material
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
@@ -995,7 +999,28 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         theobject.bbox_min = bbox_min;
         theobject.bbox_max = bbox_max;
 
-        g_VirtualScene[model->shapes[shape].name] = theobject;
+        // Obtém a cor do material do arquivo .mtl
+        int material_id = model->shapes[shape].mesh.material_ids.empty() ? -1 : model->shapes[shape].mesh.material_ids[0];
+        if (material_id >= 0 && material_id < model->materials.size()) {
+            theobject.material_kd = glm::vec3(
+                model->materials[material_id].diffuse[0],
+                model->materials[material_id].diffuse[1],
+                model->materials[material_id].diffuse[2]
+            );
+        } else {
+            // Cor padrão caso não tenha material
+            theobject.material_kd = glm::vec3(0.8f, 0.8f, 0.8f);
+        }
+
+        // Se o nome já existe, adiciona um sufixo único
+        std::string object_name = model->shapes[shape].name;
+        int suffix = 0;
+        while (g_VirtualScene.find(object_name) != g_VirtualScene.end()) {
+            suffix++;
+            object_name = model->shapes[shape].name + "_" + std::to_string(suffix);
+        }
+        theobject.name = object_name;
+        g_VirtualScene[object_name] = theobject;
     }
 
     GLuint VBO_model_coefficients_id;
@@ -1301,7 +1326,12 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
             }
         }
     }
-    
+    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_RELEASE)
+    {
+        // Quando o usuário soltar o botão esquerdo do mouse, atualizamos a
+        // variável abaixo para false.
+        g_LeftMouseButtonPressed = false;
+    }
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS)
     {
         // Se o usuário pressionou o botão esquerdo do mouse, guardamos a
@@ -1487,39 +1517,6 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     if (key == GLFW_KEY_H && action == GLFW_PRESS)
     {
         g_ShowInfoText = !g_ShowInfoText;
-    }
-    //DEBUG TIRAR DEPOIS   
-    // Controles de debug para ajustar posição da PONTA DA VARA (onde a linha começa)
-    if (g_CurrentGameState == FISHING_PHASE) {
-        // I/K - Ajustar X da ponta da vara
-        if (key == GLFW_KEY_I && action == GLFW_PRESS) {
-            g_RodTipDebug.x += g_RodTipDebugStep;
-            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
-        }
-        if (key == GLFW_KEY_K && action == GLFW_PRESS) {
-            g_RodTipDebug.x -= g_RodTipDebugStep;
-            printf("Rod Tip X: %.1f\n", g_RodTipDebug.x);
-        }
-        
-        // J/L - Ajustar Y da ponta da vara (altura)
-        if (key == GLFW_KEY_J && action == GLFW_PRESS) {
-            g_RodTipDebug.y -= g_RodTipDebugStep;
-            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
-        }
-        if (key == GLFW_KEY_L && action == GLFW_PRESS) {
-            g_RodTipDebug.y += g_RodTipDebugStep;
-            printf("Rod Tip Y: %.1f\n", g_RodTipDebug.y);
-        }
-        
-        // U/O - Ajustar Z da ponta da vara (frente/trás)
-        if (key == GLFW_KEY_U && action == GLFW_PRESS) {
-            g_RodTipDebug.z += g_RodTipDebugStep;
-            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
-        }
-        if (key == GLFW_KEY_O && action == GLFW_PRESS) {
-            g_RodTipDebug.z -= g_RodTipDebugStep;
-            printf("Rod Tip Z: %.1f\n", g_RodTipDebug.z);
-        }
     }
 }
 
@@ -1857,9 +1854,13 @@ void LoadGameResources()
     ComputeNormals(&boatmodel);
     BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
-    ObjModel planemodel("../../data/models/plane.obj");
-    ComputeNormals(&planemodel);
-    BuildTrianglesAndAddToVirtualScene(&planemodel);
+    ObjModel terrainmodel("../../data/terrain.obj", "../../data/");
+    ComputeNormals(&terrainmodel);
+    BuildTrianglesAndAddToVirtualScene(&terrainmodel);
+
+    ObjModel watermodel("../../data/water.obj", "../../data/");
+    ComputeNormals(&watermodel);
+    BuildTrianglesAndAddToVirtualScene(&watermodel);
 
     ObjModel fishmodel("../../data/models/fish.obj");
     ComputeNormals(&fishmodel);
@@ -1920,18 +1921,38 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     // Renderizar objetos do jogo
     // =====================================================================
     
-    #define MAP           0
-    #define BOAT          1
-    #define FISH          2
-    #define BAIT          3
-    #define HOOK          4
-    #define ROD           5
+    #define MAP             0
+    #define BOAT            1
+    #define FISH            2
+    #define BAIT            3
+    #define HOOK            4
+    #define ROD             5
+    #define FISHING_LINE    6
+    #define TREE            7
+    #define WATER           8
 
-    // Desenhamos o mapa
-    glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, 1.0f, MAP_SCALE);
+    // Desenhamos o terreno
+    glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
     glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
     glUniform1i(g_object_id_uniform, MAP);
-    DrawVirtualObject("the_plane");
+    DrawVirtualObject("Landscape.005");
+
+    // Desenhamos as árvores (agora com nomes únicos Tree_1, Tree_2, etc.)
+    for (int i = 1; i <= 500; i++) {
+        std::string tree_name = "Tree_" + std::to_string(i);
+        if (g_VirtualScene.find(tree_name) != g_VirtualScene.end()) {
+            model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+            glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, TREE);
+            DrawVirtualObject(tree_name.c_str());
+        }
+    }
+
+    // Desenhamos a água
+    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, WATER);
+    DrawVirtualObject("Landscape_plane.002");
 
     // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
     if (g_CurrentGameState == NAVIGATION_PHASE) {

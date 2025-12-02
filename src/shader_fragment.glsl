@@ -29,11 +29,17 @@ uniform mat4 projection;
 #define HOOK            4
 #define ROD             5
 #define FISHING_LINE    6
+#define TREE            7
+#define WATER           8
+
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
 uniform vec4 bbox_min;
 uniform vec4 bbox_max;
+
+// Cor difusa do material (do arquivo .mtl)
+uniform vec3 material_kd;
 
 // Variáveis para acesso das imagens de textura
 uniform sampler2D EarthDayTexture;    // TextureImage0 - Earth surface texture
@@ -85,7 +91,8 @@ void main()
 
     if (object_id == MAP) {
         uv_coords = texcoords;
-        Kd0 = texture(EarthDayTexture, uv_coords).rgb;
+        // Use material color from MTL file (passed as uniform)
+        Kd0 = material_kd;
     }
     else if (object_id == BOAT) {
         uv_coords = texcoords;
@@ -117,17 +124,14 @@ void main()
         uv_coords = texcoords;
         Kd0 = texture(HookTexture, uv_coords).rgb;
     }
-    else if (object_id == ROD) {
-        // Vara de pesca: cor marrom/bege 
+    else if (object_id == TREE) {
         uv_coords = texcoords;
-        Kd0 = vec3(0.6, 0.4, 0.2);
+        Kd0 = material_kd;
     }
-    else if (object_id == FISHING_LINE) {
-        // Linha de pesca: branco puro, sem iluminação
-        color.rgb = vec3(1.0, 1.0, 1.0);
-        color.a = 1.0;
-        color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
-        return; // Sai antes do cálculo de iluminação
+    else if (object_id == WATER) {
+        uv_coords = texcoords;
+        // Use material color from MTL file (passed as uniform)
+        Kd0 = material_kd;
     }
     else {
         uv_coords = texcoords;
@@ -157,5 +161,5 @@ void main()
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
     color.rgb = pow(color.rgb, vec3(1.0,1.0,1.0)/2.2);
-}
+} 
 

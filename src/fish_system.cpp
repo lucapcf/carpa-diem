@@ -14,8 +14,9 @@
 // =====================================================================
 // { name, model_path, shape_name, texture_path, texture_id, spawn_chance, min_speed, max_speed, catch_chance, points, scale }
 // Nota: Angler Fish e Blowfish usam cores de material (sem textura de imagem)
+// spawn_chance deve somar 1.0 (100%)
 FishTypeInfo g_FishTypes[FISH_TYPE_COUNT] = {
-    { "Peixe-Pescador", "../../data/models/fishs/Angler Fish/model.obj",      "AnglerFish",         nullptr, -1, 0.20f, 0.3f, 0.5f, 0.40f, 100, 0.5f },
+    { "Peixe-Pescador", "../../data/models/fishs/Angler Fish/model.obj",      "AnglerFish",         nullptr, -1, 0.10f, 0.3f, 0.5f, 0.40f, 100, 0.5f },
     { "Baiacu",         "../../data/models/fishs/Blowfish/Blowfish_01.obj",   "Blowfish_01_Sphere", nullptr, -1, 0.25f, 0.2f, 0.4f, 0.80f,  15, 0.05f },
     { "Peixe-Rei",      "../../data/models/fishs/Kingfish/Mesh_Kingfish.obj", "Geo_Kingfish",       "../../data/models/fishs/Kingfish/Tex_Kingfish.png", -1, 0.10f, 0.5f, 0.8f, 0.35f,  80, 0.01f },
     { "Truta",          "../../data/models/fishs/Trout/Mesh_Trout.obj",       "Geo_Trout",          "../../data/models/fishs/Trout/Tex_Trout.png", -1, 0.35f, 0.4f, 0.7f, 0.70f,  25, 0.015f },
