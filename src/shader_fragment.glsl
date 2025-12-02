@@ -19,14 +19,13 @@ uniform mat4 view;
 uniform mat4 projection;
 
 // Identificador que define qual objeto está sendo desenhado no momento
-#define MAP    0  // Plane como mapa
-#define BOAT   1  // Boat.obj como barco
-#define FISH   2  // fish como peixe
-#define BAIT   3  // FishingLure (isca)
-#define HOOK   4  // Hook (anzol)
-#define ROD    5  // Vara de pesca
-#define FISHING_LINE 6 // Linha de pesca
-
+#define MAP             0 
+#define BOAT            1
+#define FISH            2
+#define BAIT            3
+#define HOOK            4
+#define ROD             5
+#define FISHING_LINE    6
 uniform int object_id;
 
 // Parâmetros da axis-aligned bounding box (AABB) do modelo
@@ -34,12 +33,12 @@ uniform vec4 bbox_min;
 uniform vec4 bbox_max;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D EarthDayTexture;    // TextureImage0 - Earth surface texture
-uniform sampler2D EarthNightTexture;  // TextureImage1 - Earth night lights
-uniform sampler2D BoatTexture;        // TextureImage2 - Boat texture
-uniform sampler2D FishTexture;        // TextureImage3 - Fish texture  
-uniform sampler2D BaitTexture;        // TextureImage4 - Bait texture
-uniform sampler2D HookTexture;        // TextureImage5 - Hook texture
+uniform sampler2D EarthDayTexture;
+uniform sampler2D EarthNightTexture;
+uniform sampler2D BoatTexture;
+uniform sampler2D FishTexture;
+uniform sampler2D BaitTexture;
+uniform sampler2D HookTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;

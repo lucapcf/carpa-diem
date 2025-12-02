@@ -1782,27 +1782,27 @@ void LoadGameResources()
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
-    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
-    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
-    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
-    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
+    LoadTextureImage("../../data/textures/tc-earth_daymap_surface.jpg");
+    LoadTextureImage("../../data/textures/tc-earth_nightmap_citylights.gif");
+    LoadTextureImage("../../data/textures/boat.tga");
+    LoadTextureImage("../../data/textures/fish.png");
+    LoadTextureImage("../../data/textures/lure.png");
+    LoadTextureImage("../../data/textures/hook.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel baitmodel("../../data/bait.obj");
+    ObjModel baitmodel("../../data/models/bait.obj");
     ComputeNormals(&baitmodel);
     BuildTrianglesAndAddToVirtualScene(&baitmodel);
 
-    ObjModel boatmodel("../../data/boat.obj");
+    ObjModel boatmodel("../../data/models/boat.obj");
     ComputeNormals(&boatmodel);
     BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
-    ObjModel planemodel("../../data/plane.obj");
+    ObjModel planemodel("../../data/models/plane.obj");
     ComputeNormals(&planemodel);
     BuildTrianglesAndAddToVirtualScene(&planemodel);
 
-    ObjModel fishmodel("../../data/fish.obj");
+    ObjModel fishmodel("../../data/models/fish.obj");
     ComputeNormals(&fishmodel);
     BuildTrianglesAndAddToVirtualScene(&fishmodel);
 }
