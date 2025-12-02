@@ -52,6 +52,7 @@
 #include "game_types.h"
 #include "rod_system.h"
 #include "fish_system.h"
+#include "collisions.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -196,6 +197,7 @@ GLint g_projection_uniform;
 GLint g_object_id_uniform;
 GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
+GLint g_fish_texture_id_uniform; // ID da textura do peixe atual
 
 // Grid variables para desenhar linhas das zonas de pesca
 GLuint g_GridVAO = 0;
@@ -342,24 +344,6 @@ MapArea GetCurrentArea(glm::vec3 position) {
         }
     }
     return AREA_1_1; // Default
-}
-
-// Função para testar colisão AABB-AABB
-bool TestAABBAABB(const AABB& a, const AABB& b) {
-    return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
-           (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
-           (a.min.z <= b.max.z && a.max.z >= b.min.z);
-}
-
-// Função para testar colisão Esfera-Esfera
-bool TestSphereSphere(glm::vec3 center1, float radius1, glm::vec3 center2, float radius2) {
-    float distance = glm::length(center1 - center2);
-    return distance <= (radius1 + radius2);
-}
-
-// Função para testar colisão Esfera-Plano
-bool TestSpherePlane(glm::vec3 sphere_center, float sphere_radius, float plane_y) {
-    return (sphere_center.y - sphere_radius) <= plane_y;
 }
 
 // Função para calcular ponto na curva de Bézier cúbica
@@ -528,12 +512,21 @@ void UpdateGamePhysics(float deltaTime) {
             g_Bait.velocity.z = control_velocity.z;
             g_Bait.velocity.y = 0.0f;
 
-            if (TestSphereSphere(g_Bait.position, g_Bait.radius, g_Fish.position, 0.2f)) {
-                printf("PEIXE CAPTURADO!\n");
+            // Tenta fisgar o peixe aleatório
+            HookResult result = TryHookRandomFish(g_Bait, 0.3f);
+            if (result == HOOK_FISH_CAUGHT) {
+                printf("PEIXE CAPTURADO! +%d pontos\n", GetHookedFishPoints());
                 g_CurrentGameState = NAVIGATION_PHASE;
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
-                g_Fish.bezier_t = 0.0f;
+                // Gera novo peixe para a próxima vez
+                MapArea area = GetCurrentArea(g_Boat.position);
+                SpawnRandomFish(area);
+            }
+            else if (result == HOOK_FISH_ESCAPED) {
+                // Peixe escapou, gera um novo
+                MapArea area = GetCurrentArea(g_Boat.position);
+                SpawnRandomFish(area);
             }
         }
     }
@@ -746,6 +739,7 @@ void LoadShadersFromFiles()
     g_object_id_uniform  = glGetUniformLocation(g_GpuProgramID, "object_id"); // Variável "object_id" em shader_fragment.glsl
     g_bbox_min_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_min");
     g_bbox_max_uniform   = glGetUniformLocation(g_GpuProgramID, "bbox_max");
+    g_fish_texture_id_uniform = glGetUniformLocation(g_GpuProgramID, "fish_texture_id"); // ID da textura do peixe
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
@@ -755,6 +749,9 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 3);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "BaitTexture"), 4);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "HookTexture"), 5);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "KingfishTexture"), 6);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "TroutTexture"), 7);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "PiranhaTexture"), 8);
     glUseProgram(0);
 }
 
@@ -887,11 +884,16 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
     std::vector<float>  model_coefficients;
     std::vector<float>  normal_coefficients;
     std::vector<float>  texture_coefficients;
+    std::vector<float>  color_coefficients;  // Cores RGB do material MTL
 
     for (size_t shape = 0; shape < model->shapes.size(); ++shape)
     {
         size_t first_index = indices.size();
         size_t num_triangles = model->shapes[shape].mesh.num_face_vertices.size();
+
+        // Debug: mostrar info dos materiais
+        printf("  Shape '%s': %zu triangles, %zu materials loaded\n", 
+               model->shapes[shape].name.c_str(), num_triangles, model->materials.size());
 
         const float minval = std::numeric_limits<float>::min();
         const float maxval = std::numeric_limits<float>::max();
@@ -902,6 +904,29 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         for (size_t triangle = 0; triangle < num_triangles; ++triangle)
         {
             assert(model->shapes[shape].mesh.num_face_vertices[triangle] == 3);
+
+            // Obtém o índice do material para esta face (triângulo)
+            int material_id = -1;
+            if (!model->shapes[shape].mesh.material_ids.empty()) {
+                material_id = model->shapes[shape].mesh.material_ids[triangle];
+            }
+
+            // Debug: primeiro triângulo de cada shape
+            if (triangle == 0) {
+                printf("    -> First triangle material_id: %d\n", material_id);
+            }
+
+            // Cor difusa do material (Kd) - padrão branco se não houver material
+            float r = 1.0f, g = 1.0f, b = 1.0f;
+            if (material_id >= 0 && material_id < (int)model->materials.size()) {
+                r = model->materials[material_id].diffuse[0];
+                g = model->materials[material_id].diffuse[1];
+                b = model->materials[material_id].diffuse[2];
+                // Debug: mostrar cor do primeiro triângulo
+                if (triangle == 0) {
+                    printf("    -> Material Kd: (%.2f, %.2f, %.2f)\n", r, g, b);
+                }
+            }
 
             for (size_t vertex = 0; vertex < 3; ++vertex)
             {
@@ -948,6 +973,11 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
                     texture_coefficients.push_back( u );
                     texture_coefficients.push_back( v );
                 }
+
+                // Adiciona a cor do material (Kd) para este vértice
+                color_coefficients.push_back( r );
+                color_coefficients.push_back( g );
+                color_coefficients.push_back( b );
             }
         }
 
@@ -998,8 +1028,23 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
         glBindBuffer(GL_ARRAY_BUFFER, VBO_texture_coefficients_id);
         glBufferData(GL_ARRAY_BUFFER, texture_coefficients.size() * sizeof(float), NULL, GL_STATIC_DRAW);
         glBufferSubData(GL_ARRAY_BUFFER, 0, texture_coefficients.size() * sizeof(float), texture_coefficients.data());
-        location = 2; // "(location = 1)" em "shader_vertex.glsl"
+        location = 2; // "(location = 2)" em "shader_vertex.glsl"
         number_of_dimensions = 2; // vec2 em "shader_vertex.glsl"
+        glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
+        glEnableVertexAttribArray(location);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+    }
+
+    // VBO para cores do material (Kd do arquivo MTL)
+    if ( !color_coefficients.empty() )
+    {
+        GLuint VBO_color_coefficients_id;
+        glGenBuffers(1, &VBO_color_coefficients_id);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO_color_coefficients_id);
+        glBufferData(GL_ARRAY_BUFFER, color_coefficients.size() * sizeof(float), NULL, GL_STATIC_DRAW);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, color_coefficients.size() * sizeof(float), color_coefficients.data());
+        location = 3; // "(location = 3)" em "shader_vertex.glsl"
+        number_of_dimensions = 3; // vec3 em "shader_vertex.glsl"
         glVertexAttribPointer(location, number_of_dimensions, GL_FLOAT, GL_FALSE, 0, 0);
         glEnableVertexAttribArray(location);
         glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -1782,12 +1827,24 @@ void LoadGameResources()
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
-    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
-    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
-    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
-    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
+    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // TextureImage0 - EarthDayTexture
+    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // TextureImage1 - EarthNightTexture
+    LoadTextureImage("../../data/boat_texture.tga");                 // TextureImage2 - BoatTexture
+    LoadTextureImage("../../data/fish_texture.png");                 // TextureImage3 - FishTexture (padrão)
+    LoadTextureImage("../../data/lure_texture.png");                 // TextureImage4 - BaitTexture
+    LoadTextureImage("../../data/hook_texture.png");                 // TextureImage5 - HookTexture
+    
+    // Carrega texturas específicas dos peixes e armazena seus IDs
+    for (int i = 0; i < FISH_TYPE_COUNT; i++) {
+        if (g_FishTypes[i].texture_path != nullptr) {
+            g_FishTypes[i].texture_id = g_NumLoadedTextures;
+            LoadTextureImage(g_FishTypes[i].texture_path);
+            printf("  -> Textura do %s: ID %d\n", g_FishTypes[i].name, g_FishTypes[i].texture_id);
+        } else {
+            g_FishTypes[i].texture_id = 3; // Usa FishTexture padrão (TextureImage3)
+            printf("  -> %s usa textura padrão (ID 3)\n", g_FishTypes[i].name);
+        }
+    }
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel baitmodel("../../data/bait.obj");
@@ -1805,6 +1862,29 @@ void LoadGameResources()
     ObjModel fishmodel("../../data/fish.obj");
     ComputeNormals(&fishmodel);
     BuildTrianglesAndAddToVirtualScene(&fishmodel);
+    
+    // Carregar modelos de peixes
+    ObjModel anglerfish("../../data/models/fishs/Angler Fish/model.obj");
+    ComputeNormals(&anglerfish);
+    BuildTrianglesAndAddToVirtualScene(&anglerfish);
+    
+    ObjModel blowfish("../../data/models/fishs/Blowfish/Blowfish_01.obj");
+    ComputeNormals(&blowfish);
+    BuildTrianglesAndAddToVirtualScene(&blowfish);
+    
+    ObjModel kingfish("../../data/models/fishs/Kingfish/Mesh_Kingfish.obj");
+    ComputeNormals(&kingfish);
+    BuildTrianglesAndAddToVirtualScene(&kingfish);
+    
+    ObjModel trout("../../data/models/fishs/Trout/Mesh_Trout.obj");
+    ComputeNormals(&trout);
+    BuildTrianglesAndAddToVirtualScene(&trout);
+    
+    ObjModel piranha("../../data/models/fishs/Piranha/Piranha.obj");
+    ComputeNormals(&piranha);
+    BuildTrianglesAndAddToVirtualScene(&piranha);
+    
+    printf("Modelos de peixes carregados!\n");
 }
 
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection)
@@ -1900,21 +1980,27 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
             DrawFishingLine(rod_tip, line_end, line_render_info);
         }
         
-        // Desenhamos o peixe
+        // Desenhamos o peixe fixo (usa textura padrão)
         model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
                 * Matrix_Rotate_Y(g_Fish.rotation_y)
                 * Matrix_Scale(0.1f, 0.1f, 0.1f);
         glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
         glUniform1i(g_object_id_uniform, FISH);
+        glUniform1i(g_fish_texture_id_uniform, 3); // Textura padrão
         DrawVirtualObject("fish_Cube");
         
-        // Desenhamos o peixe com movimento aleatório (segundo peixe)
-        model = Matrix_Translate(g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z) 
-                * Matrix_Rotate_Y(g_RandomFish.rotation_y)
-                * Matrix_Scale(0.1f, 0.1f, 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, FISH);
-        DrawVirtualObject("fish_Cube");
+        // Desenhamos o peixe com movimento aleatório (usa textura do tipo)
+        {
+            const FishTypeInfo& fishInfo = GetCurrentFishInfo();
+            float scale = fishInfo.scale;
+            model = Matrix_Translate(g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z) 
+                    * Matrix_Rotate_Y(g_RandomFish.rotation_y)
+                    * Matrix_Scale(scale, scale, scale);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, FISH);
+            glUniform1i(g_fish_texture_id_uniform, fishInfo.texture_id); // Textura do tipo de peixe
+            DrawVirtualObject(fishInfo.shape_name);
+        }
 
         if (g_Bait.is_launched) {
             // Desenhamos a isca

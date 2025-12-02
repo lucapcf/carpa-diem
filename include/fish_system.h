@@ -4,47 +4,77 @@
 #include <glm/vec3.hpp>
 
 // =====================================================================
-// Sistema para gerenciar peixes com movimento aleatório suave (Catmull-Rom)
+// Tipos de peixes (baseados nos modelos disponíveis)
 // =====================================================================
+enum FishType {
+    FISH_ANGLER,        // Peixe-pescador - raro, difícil
+    FISH_BLOWFISH,      // Baiacu - comum, fácil
+    FISH_KINGFISH,      // Peixe-rei - raro, difícil
+    FISH_TROUT,         // Truta - comum, moderado
+    FISH_PIRANHA,       // Piranha - moderado, agressivo
+    FISH_TYPE_COUNT
+};
 
-// Número de waypoints na fila (posição atual + pontos futuros)
+// Informações de cada tipo de peixe
+struct FishTypeInfo {
+    const char* name;           // Nome para exibição
+    const char* model_path;     // Caminho do modelo .obj
+    const char* shape_name;     // Nome da shape para DrawVirtualObject
+    const char* texture_path;   // Caminho da textura (nullptr = usa textura padrão)
+    int texture_id;             // ID da textura carregada (-1 = usa padrão)
+    float spawn_chance;         // Chance de spawn (soma = 1.0)
+    float min_speed;            // Velocidade mínima
+    float max_speed;            // Velocidade máxima
+    float catch_chance;         // Chance de fisgar (0.0 a 1.0)
+    int points;                 // Pontos ao capturar
+    float scale;                // Escala do modelo
+};
+
+// Tabela de tipos (definida em fish_system.cpp)
+extern FishTypeInfo g_FishTypes[FISH_TYPE_COUNT];
+
+// =====================================================================
+// Sistema de movimento (Catmull-Rom)
+// =====================================================================
 #define NUM_WAYPOINTS 4
 
-// Estrutura para o peixe com movimento aleatório usando curva Catmull-Rom contínua
 struct RandomFish {
-    glm::vec3 position;               // Posição atual do peixe
-    glm::vec3 waypoints[NUM_WAYPOINTS]; // Fila de waypoints (0=anterior, 1=atual, 2,3=futuros)
-    float segment_t;                  // Parâmetro t do segmento atual (0 a 1)
-    float speed;                      // Velocidade de percurso
-    float rotation_y;                 // Rotação atual
+    FishType type;                    // Tipo do peixe
+    glm::vec3 position;               // Posição atual
+    glm::vec3 waypoints[NUM_WAYPOINTS];
+    float segment_t;
+    float speed;
+    float rotation_y;
+    bool is_hooked;                   // Se foi fisgado
     
-    RandomFish() : position(0.0f), segment_t(0.0f), speed(0.5f), rotation_y(0.0f) {
+    RandomFish() : type(FISH_TROUT), position(0.0f), segment_t(0.0f), 
+                   speed(0.5f), rotation_y(0.0f), is_hooked(false) {
         for (int i = 0; i < NUM_WAYPOINTS; i++) waypoints[i] = glm::vec3(0.0f);
     }
 };
 
-// Peixe gerenciado pelo fish_system (exportado para uso em main.cpp)
 extern RandomFish g_RandomFish;
 
-// Inicializa o sistema de peixes
+// =====================================================================
+// Funções
+// =====================================================================
 void InitializeFishSystem();
-
-// Atualiza a posição do peixe antigo (usando Bézier)
 void UpdateFish(float delta_time);
-
-// Atualiza o peixe com movimento aleatório suave
 void UpdateRandomFish(float delta_time);
-
-// Gera uma nova rota para o peixe antigo em uma área específica
 void GenerateFishRoute(int area);
-
-// Gera o peixe aleatório em uma área específica
 void SpawnRandomFish(int area);
-
-// Reseta o peixe
 void ResetFish();
 
-// Retorna o nome do objeto 3D do peixe para renderização
-const char* GetFishModelName();
+// Retorna info do peixe atual
+const FishTypeInfo& GetCurrentFishInfo();
+
+// Funções de acesso ao peixe aleatório (para uso em collisions.cpp)
+glm::vec3 GetRandomFishPosition();
+const FishTypeInfo& GetRandomFishInfo();
+bool IsRandomFishHooked();
+void SetRandomFishHooked(bool hooked);
+
+// Tenta fisgar o peixe (retorna true se conseguiu)
+bool TryHookFish(const glm::vec3& hook_pos, float radius);
 
 #endif // FISH_SYSTEM_H

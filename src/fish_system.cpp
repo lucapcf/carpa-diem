@@ -10,35 +10,38 @@
 #include <glm/geometric.hpp>
 
 // =====================================================================
+// Tabela de tipos de peixes
+// =====================================================================
+// { name, model_path, shape_name, texture_path, texture_id, spawn_chance, min_speed, max_speed, catch_chance, points, scale }
+// Nota: Angler Fish e Blowfish usam cores de material (sem textura de imagem)
+FishTypeInfo g_FishTypes[FISH_TYPE_COUNT] = {
+    { "Peixe-Pescador", "../../data/models/fishs/Angler Fish/model.obj",      "AnglerFish",         nullptr, -1, 0.20f, 0.3f, 0.5f, 0.40f, 100, 0.5f },
+    { "Baiacu",         "../../data/models/fishs/Blowfish/Blowfish_01.obj",   "Blowfish_01_Sphere", nullptr, -1, 0.25f, 0.2f, 0.4f, 0.80f,  15, 0.05f },
+    { "Peixe-Rei",      "../../data/models/fishs/Kingfish/Mesh_Kingfish.obj", "Geo_Kingfish",       "../../data/models/fishs/Kingfish/Tex_Kingfish.png", -1, 0.10f, 0.5f, 0.8f, 0.35f,  80, 0.01f },
+    { "Truta",          "../../data/models/fishs/Trout/Mesh_Trout.obj",       "Geo_Trout",          "../../data/models/fishs/Trout/Tex_Trout.png", -1, 0.35f, 0.4f, 0.7f, 0.70f,  25, 0.015f },
+    { "Piranha",        "../../data/models/fishs/Piranha/Piranha.obj",       "Piranha_mesh",       "../../data/models/fishs/Piranha/Piranha_BaseColor.png", -1, 0.20f, 0.4f, 0.7f, 0.50f,  60, 0.15f }
+};
+
+// =====================================================================
 // Configurações da área de natação do peixe
 // =====================================================================
-static const float SWIM_DEPTH_MIN  = -1.5f;  // Profundidade mínima (mais fundo)
-static const float SWIM_DEPTH_MAX  = -0.3f;  // Profundidade máxima (mais raso)
-
-// Distância mínima e máxima para o próximo destino (a partir da posição atual)
+static const float SWIM_DEPTH_MIN  = -1.5f;
+static const float SWIM_DEPTH_MAX  = -0.3f;
 static const float MIN_MOVE_DISTANCE = 1.0f;
 static const float MAX_MOVE_DISTANCE = 3.0f;
-
-// Limites do GRID (mapa vai de -MAP_SIZE/2 a +MAP_SIZE/2)
-// MAP_SIZE = 20.0f, então limites são -10 a +10
-// Adicionamos uma margem para o peixe não encostar na borda
 static const float GRID_MARGIN = 1.0f;
 static const float GRID_MIN_X = -10.0f + GRID_MARGIN;
 static const float GRID_MAX_X =  10.0f - GRID_MARGIN;
 static const float GRID_MIN_Z = -10.0f + GRID_MARGIN;
 static const float GRID_MAX_Z =  10.0f - GRID_MARGIN;
-
-// Distância mínima para considerar que chegou ao destino
 static const float ARRIVAL_THRESHOLD = 0.3f;
+static const float HOOK_RADIUS = 1.0f;
 
-// Flag para inicialização do gerador de números aleatórios
 static bool g_RandomInitialized = false;
-
-// Destino atual do peixe antigo (ponto para onde está nadando)
 static glm::vec3 g_FishDestination;
 
 // =====================================================================
-// Peixe com movimento aleatório (novo sistema)
+// Peixe com movimento aleatório
 // =====================================================================
 RandomFish g_RandomFish;
 
@@ -46,7 +49,6 @@ RandomFish g_RandomFish;
 // Funções auxiliares
 // =====================================================================
 
-// Retorna um float aleatório entre min e max
 static float RandomFloat(float min, float max) {
     if (!g_RandomInitialized) {
         srand(static_cast<unsigned int>(time(nullptr)));
@@ -54,6 +56,20 @@ static float RandomFloat(float min, float max) {
     }
     float normalized = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
     return min + normalized * (max - min);
+}
+
+// Escolhe tipo de peixe baseado nas probabilidades de spawn
+static FishType ChooseRandomFishType() {
+    float roll = RandomFloat(0.0f, 1.0f);
+    float cumulative = 0.0f;
+    
+    for (int i = 0; i < FISH_TYPE_COUNT; i++) {
+        cumulative += g_FishTypes[i].spawn_chance;
+        if (roll <= cumulative) {
+            return static_cast<FishType>(i);
+        }
+    }
+    return FISH_TROUT;  // Fallback
 }
 
 // Gera um novo destino aleatório próximo à posição atual do peixe
@@ -76,6 +92,10 @@ static void GenerateNewDestination() {
 // Funções do sistema de peixes
 // =====================================================================
 
+const FishTypeInfo& GetCurrentFishInfo() {
+    return g_FishTypes[g_RandomFish.type];
+}
+
 void InitializeFishSystem() {
     printf("=================================================\n");
     printf("Inicializando sistema de peixes...\n");
@@ -87,9 +107,19 @@ void InitializeFishSystem() {
         g_RandomInitialized = true;
     }
     
-    // Valores iniciais (serão sobrescritos quando entrar no modo de pesca)
+    // Mostra tipos disponíveis
+    printf("Tipos de peixes:\n");
+    for (int i = 0; i < FISH_TYPE_COUNT; i++) {
+        printf("  %s - Spawn: %.0f%%, Fisgar: %.0f%%, Pts: %d\n",
+               g_FishTypes[i].name, 
+               g_FishTypes[i].spawn_chance * 100.0f,
+               g_FishTypes[i].catch_chance * 100.0f,
+               g_FishTypes[i].points);
+    }
+    
+    // Valores iniciais
     g_Fish.position = glm::vec3(0.0f, -0.5f, 0.0f);
-    g_Fish.speed = 0.8f;  // Velocidade de natação
+    g_Fish.speed = 0.8f;
     g_Fish.rotation_y = 0.0f;
     g_FishDestination = g_Fish.position;
     
@@ -151,10 +181,6 @@ void GenerateFishRoute(int area) {
 void ResetFish() {
     g_Fish.rotation_y = 0.0f;
     GenerateNewDestination();
-}
-
-const char* GetFishModelName() {
-    return "fish_Cube";  // Nome do objeto no arquivo fish.obj
 }
 
 // =====================================================================
@@ -249,6 +275,10 @@ void SpawnRandomFish(int area) {
         g_RandomInitialized = true;
     }
     
+    // Escolhe tipo de peixe aleatório
+    g_RandomFish.type = ChooseRandomFishType();
+    const FishTypeInfo& info = g_FishTypes[g_RandomFish.type];
+    
     // Pega o centro da área de pesca para posição inicial
     glm::vec3 area_center = g_MapAreas[area].center;
     
@@ -259,11 +289,7 @@ void SpawnRandomFish(int area) {
         area_center.z + RandomFloat(-2.0f, 2.0f)
     ));
     
-    // Inicializa todos os waypoints
-    // waypoint[0] = ponto anterior (para cálculo de tangente)
-    // waypoint[1] = posição atual do peixe
-    // waypoint[2] = próximo destino
-    // waypoint[3] = destino seguinte
+    // Inicializa waypoints
     g_RandomFish.waypoints[0] = ClampToGrid(start_pos + glm::vec3(RandomFloat(-1.0f, 1.0f), 0.0f, RandomFloat(-1.0f, 1.0f)));
     g_RandomFish.waypoints[1] = start_pos;
     g_RandomFish.waypoints[2] = GenerateRandomPointNear(g_RandomFish.waypoints[1]);
@@ -271,16 +297,12 @@ void SpawnRandomFish(int area) {
     
     g_RandomFish.position = start_pos;
     g_RandomFish.segment_t = 0.0f;
-    g_RandomFish.speed = RandomFloat(0.4f, 0.7f);  // Velocidade no segmento
+    g_RandomFish.speed = RandomFloat(info.min_speed, info.max_speed);
     g_RandomFish.rotation_y = RandomFloat(0.0f, 2.0f * 3.14159f);
+    g_RandomFish.is_hooked = false;
     
-    printf("[RandomFish] Peixe gerado na area %d em (%.2f, %.2f, %.2f)\n", 
-           area, g_RandomFish.position.x, g_RandomFish.position.y, g_RandomFish.position.z);
-    printf("[RandomFish] Waypoints: [0](%.1f,%.1f) [1](%.1f,%.1f) [2](%.1f,%.1f) [3](%.1f,%.1f)\n",
-           g_RandomFish.waypoints[0].x, g_RandomFish.waypoints[0].z,
-           g_RandomFish.waypoints[1].x, g_RandomFish.waypoints[1].z,
-           g_RandomFish.waypoints[2].x, g_RandomFish.waypoints[2].z,
-           g_RandomFish.waypoints[3].x, g_RandomFish.waypoints[3].z);
+    printf("[Fish] %s apareceu! (Vel: %.2f, Fisgar: %.0f%%, Pts: %d)\n", 
+           info.name, g_RandomFish.speed, info.catch_chance * 100.0f, info.points);
 }
 
 void UpdateRandomFish(float delta_time) {
@@ -310,7 +332,6 @@ void UpdateRandomFish(float delta_time) {
     );
     
     // Garantir que a posição final também respeita os limites do grid
-    // (a curva Catmull-Rom pode ultrapassar os waypoints)
     g_RandomFish.position = ClampToGrid(g_RandomFish.position);
     
     // Calcular rotação baseada na direção do movimento
@@ -318,4 +339,44 @@ void UpdateRandomFish(float delta_time) {
     if (glm::length(movement) > 0.001f) {
         g_RandomFish.rotation_y = atan2(movement.x, movement.z);
     }
+}
+
+// Tenta fisgar o peixe quando anzol está próximo
+bool TryHookFish(const glm::vec3& hook_pos, float radius) {
+    if (g_RandomFish.is_hooked) return true;
+    
+    float dist = glm::length(g_RandomFish.position - hook_pos);
+    if (dist > radius + HOOK_RADIUS) return false;
+    
+    const FishTypeInfo& info = g_FishTypes[g_RandomFish.type];
+    float roll = RandomFloat(0.0f, 1.0f);
+    
+    if (roll <= info.catch_chance) {
+        g_RandomFish.is_hooked = true;
+        printf("[Fish] %s fisgado! (+%d pontos)\n", info.name, info.points);
+        return true;
+    }
+    
+    printf("[Fish] %s escapou! (%.0f%% chance)\n", info.name, info.catch_chance * 100.0f);
+    return false;
+}
+
+// =====================================================================
+// Funções de acesso ao peixe aleatório (para collisions.cpp)
+// =====================================================================
+
+glm::vec3 GetRandomFishPosition() {
+    return g_RandomFish.position;
+}
+
+const FishTypeInfo& GetRandomFishInfo() {
+    return g_FishTypes[g_RandomFish.type];
+}
+
+bool IsRandomFishHooked() {
+    return g_RandomFish.is_hooked;
+}
+
+void SetRandomFishHooked(bool hooked) {
+    g_RandomFish.is_hooked = hooked;
 }

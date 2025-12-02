@@ -13,6 +13,9 @@ in vec4 position_model;
 // Coordenadas de textura obtidas do arquivo OBJ (se existirem!)
 in vec2 texcoords;
 
+// Cor do material obtida do arquivo MTL (Kd - diffuse color)
+in vec3 color_from_mtl;
+
 // Matrizes computadas no código C++ e enviadas para a GPU
 uniform mat4 model;
 uniform mat4 view;
@@ -37,9 +40,15 @@ uniform vec4 bbox_max;
 uniform sampler2D EarthDayTexture;    // TextureImage0 - Earth surface texture
 uniform sampler2D EarthNightTexture;  // TextureImage1 - Earth night lights
 uniform sampler2D BoatTexture;        // TextureImage2 - Boat texture
-uniform sampler2D FishTexture;        // TextureImage3 - Fish texture  
+uniform sampler2D FishTexture;        // TextureImage3 - Fish texture (padrão)
 uniform sampler2D BaitTexture;        // TextureImage4 - Bait texture
 uniform sampler2D HookTexture;        // TextureImage5 - Hook texture
+uniform sampler2D KingfishTexture;    // TextureImage6 - Kingfish texture
+uniform sampler2D TroutTexture;       // TextureImage7 - Trout texture
+uniform sampler2D PiranhaTexture;     // TextureImage8 - Piranha texture
+
+// ID da textura do peixe atual (usado quando object_id == FISH)
+uniform int fish_texture_id;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -85,7 +94,21 @@ void main()
     }
     else if (object_id == FISH) {
         uv_coords = texcoords;
-        Kd0 = texture(FishTexture, uv_coords).rgb;
+        // Escolhe a textura baseada no fish_texture_id
+        // IDs 6+ = texturas específicas, ID 3 = textura padrão, IDs negativos/0-2 = cores de material
+        if (fish_texture_id == 6) {
+            Kd0 = texture(KingfishTexture, uv_coords).rgb;
+        } else if (fish_texture_id == 7) {
+            Kd0 = texture(TroutTexture, uv_coords).rgb;
+        } else if (fish_texture_id == 8) {
+            Kd0 = texture(PiranhaTexture, uv_coords).rgb;
+        } else if (fish_texture_id == 3) {
+            // Peixes sem textura própria usam cores do arquivo MTL
+            Kd0 = color_from_mtl;
+        } else {
+            // Fallback
+            Kd0 = texture(FishTexture, uv_coords).rgb;
+        }
     }
     else if (object_id == BAIT) {
         uv_coords = texcoords;
