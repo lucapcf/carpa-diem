@@ -1717,19 +1717,19 @@ void LoadGameResources()
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/tc-earth_daymap_surface.jpg");      // EarthDayTexture
-    LoadTextureImage("../../data/tc-earth_nightmap_citylights.gif"); // EarthNightTexture
-    LoadTextureImage("../../data/boat_texture.tga");                 // BoatTexture
-    LoadTextureImage("../../data/fish_texture.png");                 // FishTexture
-    LoadTextureImage("../../data/lure_texture.png");                 // BaitTexture
-    LoadTextureImage("../../data/hook_texture.png");                 // HookTexture
+    LoadTextureImage("../../data/textures/tc-earth_daymap_surface.jpg");
+    LoadTextureImage("../../data/textures/tc-earth_nightmap_citylights.gif");
+    LoadTextureImage("../../data/textures/boat.tga");
+    LoadTextureImage("../../data/textures/fish.png");
+    LoadTextureImage("../../data/textures/lure.png");
+    LoadTextureImage("../../data/textures/hook.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel baitmodel("../../data/bait.obj");
+    ObjModel baitmodel("../../data/models/bait.obj");
     ComputeNormals(&baitmodel);
     BuildTrianglesAndAddToVirtualScene(&baitmodel);
 
-    ObjModel boatmodel("../../data/boat.obj");
+    ObjModel boatmodel("../../data/models/boat.obj");
     ComputeNormals(&boatmodel);
     BuildTrianglesAndAddToVirtualScene(&boatmodel);
 
@@ -1741,7 +1741,7 @@ void LoadGameResources()
     ComputeNormals(&watermodel);
     BuildTrianglesAndAddToVirtualScene(&watermodel);
 
-    ObjModel fishmodel("../../data/fish.obj");
+    ObjModel fishmodel("../../data/models/fish.obj");
     ComputeNormals(&fishmodel);
     BuildTrianglesAndAddToVirtualScene(&fishmodel);
 }
@@ -1777,13 +1777,15 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     // Renderizar objetos do jogo
     // =====================================================================
     
-    #define MAP           0
-    #define BOAT          1
-    #define FISH          2
-    #define BAIT          3
-    #define HOOK          4
-    #define TREE          5
-    #define WATER         6
+    #define MAP             0
+    #define BOAT            1
+    #define FISH            2
+    #define BAIT            3
+    #define HOOK            4
+    #define ROD             5
+    #define FISHING_LINE    6
+    #define TREE            7
+    #define WATER           8
 
     // Desenhamos o terreno
     glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
