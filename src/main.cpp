@@ -1836,6 +1836,18 @@ void LoadGameResources()
     LoadTextureImage("../../data/textures/lure.png");
     LoadTextureImage("../../data/textures/hook.png");
 
+    // Carrega texturas específicas dos peixes e armazena seus IDs
+    for (int i = 0; i < FISH_TYPE_COUNT; i++) {
+        if (g_FishTypes[i].texture_path != nullptr) {
+            g_FishTypes[i].texture_id = g_NumLoadedTextures;
+            LoadTextureImage(g_FishTypes[i].texture_path);
+            printf("  -> Textura do %s: ID %d\n", g_FishTypes[i].name, g_FishTypes[i].texture_id);
+        } else {
+            g_FishTypes[i].texture_id = 3; // Usa FishTexture padrão (TextureImage3)
+            printf("  -> %s usa textura padrão (ID 3)\n", g_FishTypes[i].name);
+        }
+    }
+
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel baitmodel("../../data/models/bait.obj");
     ComputeNormals(&baitmodel);
