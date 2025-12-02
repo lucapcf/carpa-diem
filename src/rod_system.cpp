@@ -95,7 +95,7 @@ void InitializeRodSystem() {
     
     // Carregar modelo 3D da vara básica
     try {
-        ObjModel fishing_pole("../../data/models/fishing_pole_01.obj");
+        ObjModel fishing_pole("../../data/models/Fishing_Pole_01.obj");
         ComputeNormals(&fishing_pole);
         BuildTrianglesAndAddToVirtualScene(&fishing_pole);
         printf("Vara básica (fishing_pole_01) carregada com sucesso!\n");
