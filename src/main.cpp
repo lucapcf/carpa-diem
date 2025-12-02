@@ -225,38 +225,33 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
 // Funções auxiliares do jogo
 // =====================================================================
 
-
-
-// Função para inicializar o grid das zonas de pesca
 void InitializeFishingGrid() {
-    // Criar linhas para dividir o mapa em uma grade 3x2 (3 colunas, 2 linhas)
-    // O mapa renderizado vai de -MAP_SIZE/2 a +MAP_SIZE/2 em ambos os eixos
     std::vector<float> grid_vertices;
     float half_map = MAP_SIZE / 2.0f;
-    float col_width = MAP_SIZE / 3.0f;
+    float cell_width = MAP_SIZE / ZONEMASK_W;
+    float cell_height = MAP_SIZE / ZONEMASK_H;
     
-    // Linhas verticais (dividem as 3 colunas)
-    for (int i = 1; i < 3; i++) {
-        float x = -half_map + col_width * i;
-        // Linha vertical de z = -half_map até z = +half_map
-        grid_vertices.push_back(x);     // x
-        grid_vertices.push_back(-0.59f); // y (ligeiramente acima do mapa)
-        grid_vertices.push_back(-half_map); // z (início)
+    for (int i = 0; i <= ZONEMASK_W; i++) {
+        float x = -half_map + cell_width * i;
+        grid_vertices.push_back(x);
+        grid_vertices.push_back(-0.59f);
+        grid_vertices.push_back(-half_map);
         
-        grid_vertices.push_back(x);     // x
-        grid_vertices.push_back(-0.59f); // y
-        grid_vertices.push_back(half_map);  // z (fim)
+        grid_vertices.push_back(x);
+        grid_vertices.push_back(-0.59f);
+        grid_vertices.push_back(half_map);
     }
     
-    // Linha horizontal (divide as 2 linhas)
-    float z = 0.0f; // Centro do mapa
-    grid_vertices.push_back(-half_map); // x (início)
-    grid_vertices.push_back(-0.59f);    // y
-    grid_vertices.push_back(z);         // z
-    
-    grid_vertices.push_back(half_map);  // x (fim)
-    grid_vertices.push_back(-0.59f);    // y
-    grid_vertices.push_back(z);         // z
+    for (int i = 0; i <= ZONEMASK_H; i++) {
+        float z = -half_map + cell_height * i;
+        grid_vertices.push_back(-half_map);
+        grid_vertices.push_back(-0.59f);
+        grid_vertices.push_back(z);
+        
+        grid_vertices.push_back(half_map);
+        grid_vertices.push_back(-0.59f);
+        grid_vertices.push_back(z);
+    }
     
     g_GridVertexCount = grid_vertices.size() / 3;
     
@@ -306,18 +301,6 @@ void DrawFishingGrid() {
     glUseProgram(current_program);
 }
 
-// Função para obter qual área o barco está atualmente
-MapArea GetCurrentArea(glm::vec3 position) {
-    for (int i = 0; i < NUM_AREAS; i++) {
-        const MapAreaInfo& area = g_MapAreas[i];
-        if (position.x >= area.min_bounds.x && position.x <= area.max_bounds.x &&
-            position.z >= area.min_bounds.z && position.z <= area.max_bounds.z) {
-            return static_cast<MapArea>(i);
-        }
-    }
-    return AREA_1_1; // Default
-}
-
 // Função para testar colisão AABB-AABB
 bool TestAABBAABB(const AABB& a, const AABB& b) {
     return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
@@ -354,7 +337,7 @@ glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2
 
 // Função para configurar câmera top-down (Fase Navegação)
 void SetupTopDownCamera(glm::mat4& view, glm::vec4& camera_position) {
-    camera_position = glm::vec4(0.0f, 40.0f, 0.0f, 1.0f);
+    camera_position = glm::vec4(0.0f, 55.0f, 0.0f, 1.0f);
     glm::vec4 camera_view_vector = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 0.0f, -1.0f, 0.0f);
     
@@ -389,7 +372,8 @@ void SetupFirstPersonCamera(glm::mat4& view, glm::vec4& camera_position) {
     float look_y = -sin(g_CameraPhi);
     float look_z = cos(corrected_rotation) * cos(g_CameraPhi);
     
-    glm::vec4 camera_position_c = glm::vec4(g_Boat.position.x, g_Boat.position.y + 1.0f, g_Boat.position.z, 1.0f);
+    // WATER_SURFACE_Y + 0.8f para altura dos olhos
+    glm::vec4 camera_position_c = glm::vec4(g_Boat.position.x, g_Boat.position.y + WATER_SURFACE_Y + 0.8f, g_Boat.position.z, 1.0f);
     
     camera_view_vector = glm::vec4(look_x, look_y, look_z, 0.0f);
     glm::vec4 camera_up_vector = glm::vec4(0.0f, 1.0f, 0.0f, 0.0f);
@@ -416,6 +400,8 @@ void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
 // Função para atualizar a física do jogo
 void UpdateGamePhysics(float deltaTime) {
     if (g_CurrentGameState == NAVIGATION_PHASE) {
+        glm::vec3 old_position = g_Boat.position;
+        
         // Atualizar movimento do barco
         float boat_speed = g_Boat.speed * deltaTime;
         if (g_W_pressed) {
@@ -433,6 +419,10 @@ void UpdateGamePhysics(float deltaTime) {
             g_Boat.rotation_y -= 2.0f * deltaTime;
         }
         g_Boat.position.y = 0.0f;
+        
+        if (!IsValidBoatPosition(g_Boat.position)) {
+            g_Boat.position = old_position;
+        }
         
     } else if (g_CurrentGameState == FISHING_PHASE) {
         // Atualizar movimento do peixe na curva de Bézier
@@ -463,10 +453,10 @@ void UpdateGamePhysics(float deltaTime) {
                 g_Bait.position += g_Bait.velocity * deltaTime;
                 
                 // Verificar se a isca atingiu a água
-                if (TestSpherePlane(g_Bait.position, g_Bait.radius, -0.3f)) {
+                if (TestSpherePlane(g_Bait.position, g_Bait.radius, WATER_SURFACE_Y)) {
                     g_Bait.is_in_water = true;
                     g_Bait.velocity = glm::vec3(0.0f);
-                    g_Bait.position.y = -0.3f;
+                    g_Bait.position.y = WATER_SURFACE_Y;
                     printf("Isca na água!\n");
                 }
             } else {
@@ -1363,27 +1353,27 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
     // Alternar entre fases com Enter
     if (key == GLFW_KEY_ENTER && action == GLFW_PRESS) {
         if (g_CurrentGameState == NAVIGATION_PHASE) {
-            MapArea current_area = GetCurrentArea(g_Boat.position);
-            if (g_MapAreas[current_area].has_fish) {
+            if (IsValidBoatPosition(g_Boat.position)) {
                 g_CurrentGameState = FISHING_PHASE;
                 g_Bait.position = g_Boat.position;
-                g_Bait.position.y = 0.5f;
+                g_Bait.position.y = -1.5f;
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
                 
-                // Configurar curva de Bézier do peixe baseada na área atual
-                glm::vec3 area_center = g_MapAreas[current_area].center;
-                g_FishBezierPoints[0] = area_center + glm::vec3(-1.0f, -0.5f, -1.0f);
-                g_FishBezierPoints[1] = area_center + glm::vec3(-0.5f, -0.5f, 1.0f);
-                g_FishBezierPoints[2] = area_center + glm::vec3(0.5f, -0.5f, -1.0f);
-                g_FishBezierPoints[3] = area_center + glm::vec3(1.0f, -0.5f, 1.0f);
+                // Configurar curva de Bézier do peixe baseada na posição atual
+                glm::vec3 fish_center = g_Boat.position;
+                fish_center.y = WATER_SURFACE_Y;
+                g_FishBezierPoints[0] = fish_center + glm::vec3(-1.0f, 0.0f, -1.0f);
+                g_FishBezierPoints[1] = fish_center + glm::vec3(-0.5f, 0.0f, 1.0f);
+                g_FishBezierPoints[2] = fish_center + glm::vec3(0.5f, 0.0f, -1.0f);
+                g_FishBezierPoints[3] = fish_center + glm::vec3(1.0f, 0.0f, 1.0f);
 
                 // Configurar câmera para começar na frente do barco
                 FirstPersonCameraConfig(window);
 
-                printf("Mudando para Fase de Pescaria na área %d\n", current_area);
+                printf("Mudando para Fase de Pescaria\n");
             } else {
-                printf("Nao há peixe nesta área! Procure uma área com peixe.\n");
+                printf("Posicao invalida para pescar!\n");
             }
         } else {
           
@@ -1816,7 +1806,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     }
 
     // Desenhamos o barco
-    model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y, g_Boat.position.z) 
+    model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y - 1.7f, g_Boat.position.z) 
             * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
             * Matrix_Scale(0.01f, 0.01f, 0.01f);
     glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
@@ -1854,18 +1844,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     // Mostrar estado atual do jogo
     if (g_ShowInfoText) {
         std::string game_state = (g_CurrentGameState == NAVIGATION_PHASE) ? "FASE DE NAVEGAÇÃO" : "FASE DE PESCA";
-        TextRendering_PrintString(window, "Estado: " + game_state, -1.0f, 0.9f, 1.0f);
-        
-        // Mostrar área atual na Fase de Navegação
-        if (g_CurrentGameState == NAVIGATION_PHASE) {
-            MapArea current_area = GetCurrentArea(g_Boat.position);
-            bool has_fish = g_MapAreas[current_area].has_fish;
-            std::string area_info = "Area: " + std::to_string((current_area % 3) + 1) + 
-                                    "," + std::to_string((current_area / 3) + 1);
-            if (has_fish) area_info += " (Peixe!)";
-            TextRendering_PrintString(window, area_info, -1.0f, 0.8f, 1.0f);
-        }
-        
+        TextRendering_PrintString(window, "Estado: " + game_state, -1.0f, 0.9f, 1.0f);        
         TextRendering_PrintString(window, "Controles:", -1.0f, 0.7f, 1.0f);
         TextRendering_PrintString(window, "WASD - Movimento", -1.0f, 0.6f, 1.0f);
         TextRendering_PrintString(window, "Enter - Alternar Fase", -1.0f, 0.5f, 1.0f);

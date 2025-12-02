@@ -6,6 +6,16 @@
 #define M_PI   3.14159265358979323846
 #define M_PI_2 1.57079632679489661923
 
+#define ZONEMASK_W 25
+#define ZONEMASK_H 25
+
+#define WATER_SURFACE_Y -1.7f
+
+enum ZoneType {
+    ZONE_INVALID = 0,
+    ZONE_VALID = 1
+};
+
 enum GameState {
     NAVIGATION_PHASE,
     FISHING_PHASE
@@ -14,16 +24,6 @@ enum GameState {
 enum CameraType {
     GAME_CAMERA,
     DEBUG_CAMERA
-};
-
-enum MapArea {
-    AREA_1_1 = 0,
-    AREA_1_2 = 1,
-    AREA_1_3 = 2,
-    AREA_2_1 = 3,
-    AREA_2_2 = 4,
-    AREA_2_3 = 5,
-    NUM_AREAS = 6
 };
 
 struct AABB {

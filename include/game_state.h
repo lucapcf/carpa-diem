@@ -12,8 +12,7 @@ extern Boat g_Boat;
 extern Fish g_Fish;
 extern Bait g_Bait;
 
-// Áreas do mapa
-extern MapAreaInfo g_MapAreas[NUM_AREAS];
+extern int g_ZoneMask[ZONEMASK_H][ZONEMASK_W];
 
 // Pontos de controle da curva de Bézier
 extern glm::vec3 g_FishBezierPoints[4];
@@ -25,7 +24,10 @@ extern bool g_S_pressed;
 extern bool g_D_pressed;
 
 // Funções de inicialização
-void InitializeMapAreas();
 void InitializeGameState();
+
+// Funções de verificação de zona
+ZoneType GetZoneTypeAtPosition(glm::vec3 position);
+bool IsValidBoatPosition(glm::vec3 position);
 
 #endif
