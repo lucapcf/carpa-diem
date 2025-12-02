@@ -2,6 +2,7 @@
 #define GAME_TYPES_H
 
 #include <glm/vec3.hpp>
+#include "collision.h"
 
 #define M_PI   3.14159265358979323846
 #define M_PI_2 1.57079632679489661923
@@ -26,13 +27,7 @@ enum MapArea {
     NUM_AREAS = 6
 };
 
-struct AABB {
-    glm::vec3 min;
-    glm::vec3 max;
-    
-    AABB() : min(0.0f), max(0.0f) {}
-    AABB(glm::vec3 min_val, glm::vec3 max_val) : min(min_val), max(max_val) {}
-};
+
 
 struct Boat {
     glm::vec3 position;

@@ -52,7 +52,7 @@
 #include "game_types.h"
 #include "rod_system.h"
 #include "fish_system.h"
-
+#include "collision.h"
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
 struct ObjModel
@@ -344,23 +344,7 @@ MapArea GetCurrentArea(glm::vec3 position) {
     return AREA_1_1; // Default
 }
 
-// Função para testar colisão AABB-AABB
-bool TestAABBAABB(const AABB& a, const AABB& b) {
-    return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
-           (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
-           (a.min.z <= b.max.z && a.max.z >= b.min.z);
-}
 
-// Função para testar colisão Esfera-Esfera
-bool TestSphereSphere(glm::vec3 center1, float radius1, glm::vec3 center2, float radius2) {
-    float distance = glm::length(center1 - center2);
-    return distance <= (radius1 + radius2);
-}
-
-// Função para testar colisão Esfera-Plano
-bool TestSpherePlane(glm::vec3 sphere_center, float sphere_radius, float plane_y) {
-    return (sphere_center.y - sphere_radius) <= plane_y;
-}
 
 // Função para calcular ponto na curva de Bézier cúbica
 glm::vec3 CalculateBezierPoint(float t, glm::vec3 p0, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
