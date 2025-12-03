@@ -513,8 +513,6 @@ int main(int argc, char* argv[])
         glm::mat4 view;
         glm::vec4 camera_position;
         glm::mat4 projection;
-        float nearplane = -0.1f;
-        float farplane  = -100.0f;
 
         UpdateCameras(view, camera_position, projection);
   
@@ -664,8 +662,6 @@ void LoadShadersFromFiles()
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "EarthNightTexture"), 1);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "BoatTexture"), 2);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 3);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "BaitTexture"), 4);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "HookTexture"), 5);
     glUseProgram(0);
 }
 
@@ -876,7 +872,7 @@ void BuildTrianglesAndAddToVirtualScene(ObjModel* model)
 
         // Obtém a cor do material do arquivo .mtl
         int material_id = model->shapes[shape].mesh.material_ids.empty() ? -1 : model->shapes[shape].mesh.material_ids[0];
-        if (material_id >= 0 && material_id < model->materials.size()) {
+        if (material_id >= 0 && material_id < (int)model->materials.size()) {
             theobject.material_kd = glm::vec3(
                 model->materials[material_id].diffuse[0],
                 model->materials[material_id].diffuse[1],
@@ -1707,8 +1703,6 @@ void LoadGameResources()
     LoadTextureImage("../../data/textures/tc-earth_nightmap_citylights.gif");
     LoadTextureImage("../../data/textures/boat.tga");
     LoadTextureImage("../../data/textures/fish.png");
-    LoadTextureImage("../../data/textures/lure.png");
-    LoadTextureImage("../../data/textures/hook.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel baitmodel("../../data/models/bait.obj");
@@ -1807,9 +1801,6 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     if (g_CurrentGameState == FISHING_PHASE) {
         // Renderizar vara de pesca (presa à câmera como em FPS)
         if (g_CurrentCamera == GAME_CAMERA) {
-            // Posição da vara relativa à câmera (à direita e abaixo da visão)
-            glm::vec3 rod_offset = g_RodOffset;
-            
             // Rotação da câmera
             float corrected_rotation = g_Boat.rotation_y + g_CameraTheta;
             

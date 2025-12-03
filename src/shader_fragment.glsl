@@ -39,12 +39,9 @@ uniform vec4 bbox_max;
 uniform vec3 material_kd;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D EarthDayTexture;    // TextureImage0 - Earth surface texture
-uniform sampler2D EarthNightTexture;  // TextureImage1 - Earth night lights
-uniform sampler2D BoatTexture;        // TextureImage2 - Boat texture
-uniform sampler2D FishTexture;        // TextureImage3 - Fish texture  
-uniform sampler2D BaitTexture;        // TextureImage4 - Bait texture
-uniform sampler2D HookTexture;        // TextureImage5 - Hook texture
+uniform sampler2D EarthDayTexture;
+uniform sampler2D BoatTexture;
+uniform sampler2D FishTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -76,9 +73,6 @@ void main()
 
     vec4 h = normalize(l + v);
 
-    // Coordenadas de textura U e V
-    vec2 uv_coords;
-
     // Obtemos a refletância difusa a partir da leitura da imagem de textura apropriada
     vec3 Kd0 = vec3(0.0,0.0,0.0);
     vec3 Ks0 = vec3(0.0, 0.0, 0.0); // Coeficiente de reflexão especular
@@ -87,59 +81,48 @@ void main()
 
 
     if (object_id == MAP) {
-        uv_coords = texcoords;
-        // Use material color from MTL file (passed as uniform)
+        // Use material color from MTL file
         Kd0 = material_kd;
     }
     else if (object_id == BOAT) {
-        uv_coords = texcoords;
-        Kd0 = texture(BoatTexture, uv_coords).rgb;
+        Kd0 = texture(BoatTexture, texcoords).rgb;
         Ks0 = Kd0 * 0.5;
         q = 15.0;
     }
     else if (object_id == FISH) {
-        uv_coords = texcoords;
-        Kd0 = texture(FishTexture, uv_coords).rgb;
+        Kd0 = texture(FishTexture, texcoords).rgb;
         Ks0 = Kd0 * 0.5;
         q = 20.0;
     }
     else if (object_id == BAIT) {
-        uv_coords = texcoords;
-        Kd0 = texture(BaitTexture, uv_coords).rgb;
+        Kd0 = vec3(0.89, 0.53, 0.57);   // Rosa claro
     }
     else if (object_id == HOOK) {
-        uv_coords = texcoords;
-        Kd0 = texture(HookTexture, uv_coords).rgb;
+        Kd0 = vec3(0.2, 0.2, 0.2);      // Cinza escuro
         Ks0 = Kd0 * 0.8;
         q = 1.0;
     }
     else if (object_id == TREE) {
-        uv_coords = texcoords;
         Kd0 = material_kd;
     }
     else if (object_id == WATER) {
-        uv_coords = texcoords;
-        // Use material color from MTL file (passed as uniform)
+        // Use material color from MTL file
         Kd0 = material_kd;
     }
     else if (object_id == ROD) {
-        // Vara de pesca: cor marrom/bege 
-        uv_coords = texcoords;
-        Kd0 = vec3(0.6, 0.4, 0.2);
+        Kd0 = vec3(0.6, 0.4, 0.2);      // Marrom claro
     }
     else if (object_id == FISHING_LINE) {
-        uv_coords = texcoords;
-        Kd0 = vec3(1.0, 1.0, 1.0);
+        Kd0 = vec3(1.0, 1.0, 1.0);      // Branco
     }
     else {
-        uv_coords = texcoords;
-        // Fallback: usa EarthDayTexture
-        Kd0 = texture(EarthDayTexture, uv_coords).rgb;
+        // Fallback: verde fluorescente
+        Kd0 = vec3(0.0, 1.0, 0.0);
     }
     
     // Equação de Iluminação
     if (object_id == FISH) {
-        color.rgb = Kd0 *gouraud_illumination;
+        color.rgb = Kd0 * gouraud_illumination;
     }
     else {
         float lambert = max(0,dot(n,l));
