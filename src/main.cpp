@@ -136,9 +136,6 @@ void TextRendering_PrintString(GLFWwindow* window, const std::string &str, float
 // outras informações do programa. Definidas após main().
 void TextRendering_ShowFramesPerSecond(GLFWwindow* window);
 
-// Função para desenhar grid das zonas de pesca
-void DrawFishingGrid();
-
 // Funções callback para comunicação com o sistema operacional e interação do
 // usuário. Veja mais comentários nas definições das mesmas, abaixo.
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
@@ -205,11 +202,6 @@ GLint g_bbox_min_uniform;
 GLint g_bbox_max_uniform;
 GLint g_material_kd_uniform;
 
-// Grid variables para desenhar linhas das zonas de pesca
-GLuint g_GridVAO = 0;
-GLuint g_GridVBO = 0;
-int g_GridVertexCount = 0;
-
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
 
@@ -250,83 +242,6 @@ glm::vec3 GetRodTipPosition() {
           
     glm::vec4 tip_world = model * g_RodTip;  // Usando variável de debug
     return glm::vec3(tip_world);
-}
-
-// Função para inicializar o grid das zonas de pesca
-void InitializeFishingGrid() {
-    std::vector<float> grid_vertices;
-    float half_map = MAP_SIZE / 2.0f;
-    float cell_width = MAP_SIZE / ZONEMASK_W;
-    float cell_height = MAP_SIZE / ZONEMASK_H;
-    
-    for (int i = 0; i <= ZONEMASK_W; i++) {
-        float x = -half_map + cell_width * i;
-        grid_vertices.push_back(x);
-        grid_vertices.push_back(-0.59f);
-        grid_vertices.push_back(-half_map);
-        
-        grid_vertices.push_back(x);
-        grid_vertices.push_back(-0.59f);
-        grid_vertices.push_back(half_map);
-    }
-    
-    for (int i = 0; i <= ZONEMASK_H; i++) {
-        float z = -half_map + cell_height * i;
-        grid_vertices.push_back(-half_map);
-        grid_vertices.push_back(-0.59f);
-        grid_vertices.push_back(z);
-        
-        grid_vertices.push_back(half_map);
-        grid_vertices.push_back(-0.59f);
-        grid_vertices.push_back(z);
-    }
-    
-    g_GridVertexCount = grid_vertices.size() / 3;
-    
-    // Criar VAO e VBO para o grid
-    glGenVertexArrays(1, &g_GridVAO);
-    glGenBuffers(1, &g_GridVBO);
-    
-    glBindVertexArray(g_GridVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, g_GridVBO);
-    glBufferData(GL_ARRAY_BUFFER, grid_vertices.size() * sizeof(float), grid_vertices.data(), GL_STATIC_DRAW);
-    
-    // Atributo de posição (location = 0)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    glBindVertexArray(0);
-}
-
-// Função para desenhar o grid das zonas de pesca
-void DrawFishingGrid() {
-    if (g_GridVAO == 0) return;
-    
-    // Salvar o estado atual
-    GLint current_program;
-    glGetIntegerv(GL_CURRENT_PROGRAM, &current_program);
-    
-    // Usar o programa de shader atual
-    glUseProgram(g_GpuProgramID);
-    
-    // Matriz model para o grid (sem transformações)
-    glm::mat4 model = Matrix_Identity();
-    glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-    
-    // Usar um object_id específico para o grid (pode usar um valor que não conflite)
-    glUniform1i(g_object_id_uniform, 10); // Valor diferente dos outros objetos
-    
-    // Configurar bounding box vazia para o grid
-    glUniform4f(g_bbox_min_uniform, 0.0f, 0.0f, 0.0f, 1.0f);
-    glUniform4f(g_bbox_max_uniform, 1.0f, 1.0f, 1.0f, 1.0f);
-    
-    // Desenhar as linhas
-    glBindVertexArray(g_GridVAO);
-    glDrawArrays(GL_LINES, 0, g_GridVertexCount);
-    glBindVertexArray(0);
-    
-    // Restaurar o programa anterior
-    glUseProgram(current_program);
 }
 
 // Função para calcular ponto na curva de Bézier cúbica
@@ -568,7 +483,6 @@ int main(int argc, char* argv[])
     // Inicialização do jogo
     // =====================================================================
     InitializeGameState();
-    InitializeFishingGrid();
 
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
@@ -1881,11 +1795,6 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
     glUniform1i(g_object_id_uniform, WATER);
     DrawVirtualObject("Landscape_plane.002");
-
-    // Desenhar o grid das zonas de pesca (apenas na Fase de Navegação)
-    if (g_CurrentGameState == NAVIGATION_PHASE) {
-        DrawFishingGrid();
-    }
 
     // Desenhamos o barco
     model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y - 1.7f, g_Boat.position.z) 
