@@ -14,6 +14,7 @@ set(SOURCES
   src/game_state.cpp
   src/rod_system.cpp
   src/collision.cpp
+  src/skybox.cpp
 )
 
 cmake_minimum_required(VERSION 3.5.0)

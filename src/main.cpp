@@ -35,6 +35,7 @@
 #include "game_types.h"
 #include "rod_system.h"
 #include "collision.h"
+#include "skybox.h"
 
 // Estrutura que representa um modelo geométrico carregado a partir de um
 // arquivo ".obj". Veja https://en.wikipedia.org/wiki/Wavefront_.obj_file .
@@ -187,6 +188,9 @@ GLint g_material_kd_uniform;
 
 // Número de texturas carregadas pela função LoadTextureImage()
 GLuint g_NumLoadedTextures = 0;
+
+// Skybox global
+Skybox g_Skybox;
 
 // Variáveis auxiliares para controle do mouse na fase de pesca
 double g_FishingLastCursorX = 0.0;
@@ -1706,6 +1710,9 @@ void LoadGameResources()
     LoadTextureImage("../../data/textures/boat.tga");
     LoadTextureImage("../../data/textures/fish.png");
 
+    // Inicializar skybox (gera textura procedural de céu)
+    InitializeSkybox(g_Skybox);
+
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel terrainmodel("../../data/models/terrain.obj");
     ComputeNormals(&terrainmodel);
@@ -1753,6 +1760,14 @@ void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& proje
 
 void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& projection)
 {
+    // =====================================================================
+    // Renderizar Skybox primeiro (fundo do céu)
+    // =====================================================================
+    RenderSkybox(g_Skybox, view, projection);
+
+    // Voltar a usar o programa de shader principal
+    glUseProgram(g_GpuProgramID);
+
     // Enviamos as matrizes "view" e "projection" para a placa de vídeo
     // (GPU). Veja o arquivo "shader_vertex.glsl", onde estas são
     // efetivamente aplicadas em todos os pontos.
