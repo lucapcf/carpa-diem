@@ -35,9 +35,22 @@ struct Boat {
     glm::vec3 position;
     float rotation_y;
     float speed;
+    float collision_radius;
     AABB bbox;
     
-    Boat() : position(0.0f, 0.0f, 0.0f), rotation_y(0.0f), speed(2.0f) {}
+    Boat() : position(0.0f, 0.0f, 0.0f), rotation_y(0.0f), speed(2.0f), collision_radius(0.8f) {}
+};
+
+struct Cube {
+    glm::vec3 position;
+    glm::vec3 size;
+
+    Cube() : position(0.0f), size(0.5f) {}
+    Cube(glm::vec3 pos, glm::vec3 s) : position(pos), size(s) {}
+
+    AABB GetAABB() const {
+        return AABB(position - size, position + size);
+    }
 };
 
 struct Fish {
