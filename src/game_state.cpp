@@ -1,4 +1,5 @@
 #include "game_state.h"
+#include "collision.h"
 
 // Constantes do mapa
 const float MAP_SCALE = 30.0f;
@@ -14,6 +15,7 @@ CameraType g_CurrentCamera = GAME_CAMERA;
 Boat g_Boat;
 Fish g_Fish;
 Bait g_Bait;
+Cube g_Cubes[NUM_CUBES];
 
 // Zone mask for valid/invalid boat positions
 // 0 = invalid, 1 = valid
@@ -82,4 +84,20 @@ bool IsValidBoatPosition(glm::vec3 position) {
 void InitializeGameState() {
     g_Boat.position = glm::vec3(0.0f, 0.0f, 0.0f);
     g_Boat.rotation_y = 0.0f;
+    
+    g_Cubes[0] = Cube(glm::vec3(11.0f, WATER_SURFACE_Y, -4.0f), glm::vec3(1.5f, 1.5f, 1.5f));
+    g_Cubes[1] = Cube(glm::vec3(-18.0f, WATER_SURFACE_Y, -17.0f), glm::vec3(0.3f, 0.3f, 0.3f));
+    g_Cubes[2] = Cube(glm::vec3(21.0f, WATER_SURFACE_Y, -8.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+}
+
+bool CheckBoatCubeCollision() {
+    glm::vec3 boat_center = glm::vec3(g_Boat.position.x, WATER_SURFACE_Y, g_Boat.position.z);
+    
+    for (int i = 0; i < NUM_CUBES; i++) {
+        AABB cube_aabb = g_Cubes[i].GetAABB();
+        if (TestAABBSphere(cube_aabb, boat_center, g_Boat.collision_radius)) {
+            return true;
+        }
+    }
+    return false;
 }

@@ -308,8 +308,7 @@ void SetupDebugCamera(glm::mat4& view, glm::vec4& camera_position) {
     view = Matrix_Camera_View(camera_position, camera_view_vector, camera_up_vector);
 }
 
-// Função para atualizar a física do jogo
-void UpdateGamePhysics(float deltaTime) {
+void UpdateGamePhysics(float deltaTime, GLFWwindow* window) {
     if (g_CurrentCamera == DEBUG_CAMERA) {
         float yaw = g_CameraTheta;
         glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -351,6 +350,12 @@ void UpdateGamePhysics(float deltaTime) {
         
         if (!IsValidBoatPosition(g_Boat.position)) {
             g_Boat.position = old_position;
+        }
+        
+        // Verificar colisão com rochas
+        if (CheckBoatCubeCollision()) {
+            printf("COLISÃO COM ROCHA! Fim de jogo.\n");
+            glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
         
     } else if (g_CurrentGameState == FISHING_PHASE) {
@@ -432,20 +437,13 @@ void UpdateGamePhysics(float deltaTime) {
     }
 }
 
-
-
-
 int main(int argc, char* argv[])
 {
-
-
     GLFWwindow* window = InitializeWindow();
 
     SetupCallbacks(window);
 
     LoadGameResources();
-
-    // Inicializar sistema de varas (carrega modelos 3D)
     InitializeRodSystem();
 
     if ( argc > 1 )
@@ -465,13 +463,10 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
-
-
     // =====================================================================
     // Inicialização do jogo
     // =====================================================================
     InitializeGameState();
-
 
     // Ficamos em um loop infinito, renderizando, até que o usuário feche a janela
     while (!glfwWindowShouldClose(window))
@@ -482,7 +477,7 @@ int main(int argc, char* argv[])
         float deltaTime = current_time - last_time;
         last_time = current_time;
 
-        UpdateGamePhysics(deltaTime);
+        UpdateGamePhysics(deltaTime, window);
 
      
         glClearColor(0.1f, 0.3f, 0.6f, 1.0f);
@@ -648,6 +643,7 @@ void LoadShadersFromFiles()
     glUseProgram(g_GpuProgramID);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "BoatTexture"), 0);
     glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 1);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "CubeTexture"), 2);
     glUseProgram(0);
 }
 
@@ -1608,10 +1604,6 @@ void PrintObjModelInfo(ObjModel* model)
   }
 }
 
-// set makeprg=cd\ ..\ &&\ make\ run\ >/dev/null
-// vim: set spell spelllang=pt_br :
-
-
 // Inicializa janela GLFW e contexto OpenGL
 GLFWwindow* InitializeWindow()
 {
@@ -1657,7 +1649,6 @@ GLFWwindow* InitializeWindow()
     glfwMakeContextCurrent(window);
 
     return window;
-
 }
 
 void SetupCallbacks(GLFWwindow* window)
@@ -1705,6 +1696,7 @@ void LoadGameResources()
     // Carregamos as imagens para serem utilizadas como textura
     LoadTextureImage("../../data/textures/boat.tga");
     LoadTextureImage("../../data/textures/fish.png");
+    LoadTextureImage("../../data/textures/cube.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
     ObjModel terrainmodel("../../data/models/terrain.obj");
@@ -1730,6 +1722,10 @@ void LoadGameResources()
     ObjModel baitmodel("../../data/models/bait.obj");
     ComputeNormals(&baitmodel);
     BuildTrianglesAndAddToVirtualScene(&baitmodel);
+
+    ObjModel cubemodel("../../data/models/cube.obj");
+    ComputeNormals(&cubemodel);
+    BuildTrianglesAndAddToVirtualScene(&cubemodel);
 }
 
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection)
@@ -1772,6 +1768,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     #define FISHING_LINE    6
     #define TREE            7
     #define WATER           8
+    #define CUBE            9
 
     // Desenhamos o terreno
     glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
@@ -1792,6 +1789,15 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
             glUniform1i(g_object_id_uniform, TREE);
             DrawVirtualObject(tree_name.c_str());
         }
+    }
+
+    // Desenhamos os cubos
+    for (int i = 0; i < NUM_CUBES; i++) {
+        model = Matrix_Translate(g_Cubes[i].position.x, g_Cubes[i].position.y, g_Cubes[i].position.z)
+                * Matrix_Scale(g_Cubes[i].size.x, g_Cubes[i].size.y, g_Cubes[i].size.z);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, CUBE);
+        DrawVirtualObject("cube");
     }
 
     // Desenhamos objetos subaquáticos

@@ -28,6 +28,7 @@ uniform mat4 projection;
 #define FISHING_LINE    6
 #define TREE            7
 #define WATER           8
+#define CUBE            9
 
 uniform int object_id;
 
@@ -41,6 +42,7 @@ uniform vec3 material_kd;
 // Variáveis para acesso das imagens de textura
 uniform sampler2D BoatTexture;
 uniform sampler2D FishTexture;
+uniform sampler2D CubeTexture;
 
 // O valor de saída ("out") de um Fragment Shader é a cor final do fragmento.
 out vec4 color;
@@ -116,6 +118,11 @@ void main()
     }
     else if (object_id == FISHING_LINE) {
         Kd0 = vec3(1.0, 1.0, 1.0);      // Branco
+    }
+    else if (object_id == CUBE) {
+        Kd0 = texture(CubeTexture, texcoords).rgb;
+        Ks0 = vec3(0.1, 0.1, 0.1);
+        q = 50.0;
     }
     else {
         // Fallback: verde fluorescente
