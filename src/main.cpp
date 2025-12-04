@@ -1330,25 +1330,25 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 fish_center.y = UNDERWATER_DEPTH;
                 
                 // 4 segmentos cúbicos formando um loop ao redor do barco
-                g_FishBezierPoints[0]  = fish_center + glm::vec3( 3.0f, 0.0f,  0.0f);
-                g_FishBezierPoints[1]  = fish_center + glm::vec3( 1.0f, 0.0f,  1.0f);
+                g_FishBezierPoints[0]  = fish_center + glm::vec3( 4.0f, 0.0f,  0.0f);
+                g_FishBezierPoints[1]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
                 g_FishBezierPoints[2]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
                 g_FishBezierPoints[3]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
 
                 g_FishBezierPoints[4]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
-                g_FishBezierPoints[5]  = fish_center + glm::vec3(-1.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[5]  = fish_center + glm::vec3(-2.0f, 0.0f, -2.0f);
                 g_FishBezierPoints[6]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
                 g_FishBezierPoints[7]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
 
                 g_FishBezierPoints[8]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
-                g_FishBezierPoints[9]  = fish_center + glm::vec3( 1.0f, 0.0f,  2.0f);
-                g_FishBezierPoints[10] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
-                g_FishBezierPoints[11] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[9]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[10] = fish_center + glm::vec3( 2.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[11] = fish_center + glm::vec3( 2.0f, 0.0f, -2.0f);
 
-                g_FishBezierPoints[12] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
-                g_FishBezierPoints[13] = fish_center + glm::vec3(-2.0f, 0.0f,  1.0f);
-                g_FishBezierPoints[14] = fish_center + glm::vec3( 3.0f, 0.0f, -2.0f);
-                g_FishBezierPoints[15] = fish_center + glm::vec3( 3.0f, 0.0f,  0.0f);
+                g_FishBezierPoints[12] = fish_center + glm::vec3( 2.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[13] = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[14] = fish_center + glm::vec3( 4.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[15] = fish_center + glm::vec3( 4.0f, 0.0f,  0.0f);
 
                 g_Fish.bezier_t = 0.0f;
                 g_Fish.bezier_segment = 0;
