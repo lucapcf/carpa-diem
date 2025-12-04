@@ -352,9 +352,9 @@ void UpdateGamePhysics(float deltaTime, GLFWwindow* window) {
             g_Boat.position = old_position;
         }
         
-        // Verificar colisão com rochas
+        // Verificar colisão com cubos
         if (CheckBoatCubeCollision()) {
-            printf("COLISÃO COM ROCHA! Fim de jogo.\n");
+            printf("COLISÃO COM CUBO! Fim de jogo.\n");
             glfwSetWindowShouldClose(window, GLFW_TRUE);
         }
         
