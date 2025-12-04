@@ -46,12 +46,7 @@ int g_ZoneMask[ZONEMASK_H][ZONEMASK_W] = {
 };
 
 // Curva de Bézier
-glm::vec3 g_FishBezierPoints[4] = {
-    glm::vec3(-3.0f, WATER_SURFACE_Y, -2.0f),
-    glm::vec3(-1.0f, WATER_SURFACE_Y,  2.0f),
-    glm::vec3( 1.0f, WATER_SURFACE_Y, -2.0f),
-    glm::vec3( 3.0f, WATER_SURFACE_Y,  2.0f)
-};
+glm::vec3 g_FishBezierPoints[FISH_BEZIER_POINTS];
 
 // Controles
 bool g_W_pressed = false;

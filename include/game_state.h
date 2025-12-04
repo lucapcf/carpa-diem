@@ -15,7 +15,7 @@ extern Bait g_Bait;
 extern int g_ZoneMask[ZONEMASK_H][ZONEMASK_W];
 
 // Pontos de controle da curva de Bézier
-extern glm::vec3 g_FishBezierPoints[4];
+extern glm::vec3 g_FishBezierPoints[FISH_BEZIER_POINTS];
 
 // Controles
 extern bool g_W_pressed;

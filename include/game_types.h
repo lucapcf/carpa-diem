@@ -11,6 +11,10 @@
 #define ZONEMASK_H 25
 
 #define WATER_SURFACE_Y -1.7f
+#define UNDERWATER_DEPTH -2.5f
+
+#define FISH_BEZIER_POINTS 16
+#define FISH_BEZIER_SEGMENTS 4
 
 enum ZoneType {
     ZONE_INVALID = 0,
@@ -39,11 +43,12 @@ struct Boat {
 struct Fish {
     glm::vec3 position;
     float bezier_t;
+    int bezier_segment;
     float speed;
     float rotation_y;
     AABB bbox;
     
-    Fish() : position(0.0f, -0.5f, 0.0f), bezier_t(0.0f), speed(0.5f), rotation_y(0.0f) {}
+    Fish() : position(0.0f, -0.5f, 0.0f), bezier_t(0.0f), bezier_segment(0), speed(0.2f), rotation_y(0.0f) {}
 };
 
 struct Bait {

@@ -1,20 +1,3 @@
-//     Universidade Federal do Rio Grande do Sul
-//             Instituto de Informática
-//       Departamento de Informática Aplicada
-//
-//    INF01047 Fundamentos de Computação Gráfica
-//               Prof. Eduardo Gastal
-//
-//                   LABORATÓRIO 5
-//
-
-// Arquivos "headers" padrões de C podem ser incluídos em um
-// programa C++, sendo necessário somente adicionar o caractere
-// "c" antes de seu nome, e remover o sufixo ".h". Exemplo:
-//    #include <stdio.h> // Em C
-//  vira
-//    #include <cstdio> // Em C++
-//
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -374,17 +357,19 @@ void UpdateGamePhysics(float deltaTime) {
         // Atualizar movimento do peixe na curva de Bézier
         g_Fish.bezier_t += g_Fish.speed * deltaTime;
         if (g_Fish.bezier_t > 1.0f) {
-            g_Fish.bezier_t = 0.0f;
+            g_Fish.bezier_t -= 1.0f;
+            g_Fish.bezier_segment = (g_Fish.bezier_segment + 1) % FISH_BEZIER_SEGMENTS;
         }
         
         // Guardar posição anterior para calcular direção
         glm::vec3 old_position = g_Fish.position;
         
+        int base_idx = g_Fish.bezier_segment * 4;
         g_Fish.position = CalculateBezierPoint(g_Fish.bezier_t, 
-                                              g_FishBezierPoints[0], 
-                                              g_FishBezierPoints[1], 
-                                              g_FishBezierPoints[2], 
-                                              g_FishBezierPoints[3]);
+                                              g_FishBezierPoints[base_idx], 
+                                              g_FishBezierPoints[base_idx + 1], 
+                                              g_FishBezierPoints[base_idx + 2], 
+                                              g_FishBezierPoints[base_idx + 3]);
         
         // Calcular rotação baseada na direção do movimento
         glm::vec3 movement_direction = g_Fish.position - old_position;
@@ -402,7 +387,7 @@ void UpdateGamePhysics(float deltaTime) {
                 if (TestSpherePlane(g_Bait.position, g_Bait.radius, WATER_SURFACE_Y)) {
                     g_Bait.is_in_water = true;
                     g_Bait.velocity = glm::vec3(0.0f);
-                    g_Bait.position.y = WATER_SURFACE_Y;
+                    g_Bait.position.y = UNDERWATER_DEPTH;
                     printf("Isca na água!\n");
                 }
             } else {
@@ -441,6 +426,7 @@ void UpdateGamePhysics(float deltaTime) {
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
                 g_Fish.bezier_t = 0.0f;
+                g_Fish.bezier_segment = 0;
             }
         }
     }
@@ -1344,15 +1330,33 @@ void KeyCallback(GLFWwindow* window, int key, int scancode, int action, int mod)
                 g_Bait.is_launched = false;
                 g_Bait.is_in_water = false;
                 
-                // Configurar curva de Bézier do peixe baseada na posição atual
                 glm::vec3 fish_center = g_Boat.position;
-                fish_center.y = WATER_SURFACE_Y;
-                g_FishBezierPoints[0] = fish_center + glm::vec3(-1.0f, 0.0f, -1.0f);
-                g_FishBezierPoints[1] = fish_center + glm::vec3(-0.5f, 0.0f, 1.0f);
-                g_FishBezierPoints[2] = fish_center + glm::vec3(0.5f, 0.0f, -1.0f);
-                g_FishBezierPoints[3] = fish_center + glm::vec3(1.0f, 0.0f, 1.0f);
+                fish_center.y = UNDERWATER_DEPTH;
+                
+                // 4 segmentos cúbicos formando um loop ao redor do barco
+                g_FishBezierPoints[0]  = fish_center + glm::vec3( 3.0f, 0.0f,  0.0f);
+                g_FishBezierPoints[1]  = fish_center + glm::vec3( 1.0f, 0.0f,  1.0f);
+                g_FishBezierPoints[2]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[3]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
 
-                // Configurar câmera para começar na frente do barco
+                g_FishBezierPoints[4]  = fish_center + glm::vec3( 2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[5]  = fish_center + glm::vec3(-1.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[6]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[7]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
+
+                g_FishBezierPoints[8]  = fish_center + glm::vec3(-2.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[9]  = fish_center + glm::vec3( 1.0f, 0.0f,  2.0f);
+                g_FishBezierPoints[10] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[11] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
+
+                g_FishBezierPoints[12] = fish_center + glm::vec3( 1.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[13] = fish_center + glm::vec3(-2.0f, 0.0f,  1.0f);
+                g_FishBezierPoints[14] = fish_center + glm::vec3( 3.0f, 0.0f, -2.0f);
+                g_FishBezierPoints[15] = fish_center + glm::vec3( 3.0f, 0.0f,  0.0f);
+
+                g_Fish.bezier_t = 0.0f;
+                g_Fish.bezier_segment = 0;
+
                 FirstPersonCameraConfig(window);
 
                 printf("Mudando para Fase de Pescaria\n");
@@ -1790,7 +1794,36 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         }
     }
 
-    // Desenhamos a água
+    // Desenhamos objetos subaquáticos
+    if (g_CurrentGameState == FISHING_PHASE) {
+        // Desenhamos o peixe
+        model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
+                * Matrix_Rotate_Y(g_Fish.rotation_y)
+                * Matrix_Scale(0.1f, 0.1f, 0.1f);
+        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+        glUniform1i(g_object_id_uniform, FISH);
+        DrawVirtualObject("fish_Cube");
+
+        if (g_Bait.is_launched && g_Bait.is_in_water) {
+            // Desenhamos a isca subaquática
+            model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y, g_Bait.position.z)
+                    * Matrix_Rotate_X(-M_PI_2)
+                    * Matrix_Scale(0.05f, 0.05f, 0.05f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, BAIT);
+            DrawVirtualObject("FishingLure");
+            
+            // Desenhamos o anzol subaquático
+            model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y - 0.1f, g_Bait.position.z) 
+                    * Matrix_Rotate_X(-M_PI_2)
+                    * Matrix_Scale(0.1f, 0.1f, 0.1f);
+            glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
+            glUniform1i(g_object_id_uniform, HOOK);
+            DrawVirtualObject("hook");
+        }
+    }
+
+    // Desenhamos a água (com blending para transparência)
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
@@ -1839,26 +1872,17 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
             DrawFishingLine(rod_tip, line_end, line_render_info);
         }
         
-        // Desenhamos o peixe
-        model = Matrix_Translate(g_Fish.position.x, g_Fish.position.y, g_Fish.position.z) 
-                * Matrix_Rotate_Y(g_Fish.rotation_y)
-                * Matrix_Scale(0.1f, 0.1f, 0.1f);
-        glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
-        glUniform1i(g_object_id_uniform, FISH);
-        DrawVirtualObject("fish_Cube");
-
-        if (g_Bait.is_launched) {
-            // Desenhamos a isca
+        // Desenhar isca quando está no ar
+        if (g_Bait.is_launched && !g_Bait.is_in_water) {
             model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y, g_Bait.position.z)
-                    * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                    * Matrix_Rotate_X(-M_PI_2)
                     * Matrix_Scale(0.05f, 0.05f, 0.05f);
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
             glUniform1i(g_object_id_uniform, BAIT);
             DrawVirtualObject("FishingLure");
             
-            // Desenhamos o anzol
             model = Matrix_Translate(g_Bait.position.x, g_Bait.position.y - 0.1f, g_Bait.position.z) 
-                    * Matrix_Rotate_X(-M_PI_2) // Ajuste de orientação do modelo
+                    * Matrix_Rotate_X(-M_PI_2)
                     * Matrix_Scale(0.1f, 0.1f, 0.1f);
             glUniformMatrix4fv(g_model_uniform, 1, GL_FALSE, glm::value_ptr(model));
             glUniform1i(g_object_id_uniform, HOOK);
