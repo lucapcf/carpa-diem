@@ -660,10 +660,8 @@ void LoadShadersFromFiles()
 
     // Variáveis em "shader_fragment.glsl" para acesso das imagens de textura
     glUseProgram(g_GpuProgramID);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "EarthDayTexture"), 0);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "EarthNightTexture"), 1);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "BoatTexture"), 2);
-    glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 3);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "BoatTexture"), 0);
+    glUniform1i(glGetUniformLocation(g_GpuProgramID, "FishTexture"), 1);
     glUseProgram(0);
 }
 
@@ -1701,31 +1699,33 @@ void LoadGameResources()
     LoadShadersFromFiles();
 
     // Carregamos as imagens para serem utilizadas como textura
-    LoadTextureImage("../../data/textures/tc-earth_daymap_surface.jpg");
-    LoadTextureImage("../../data/textures/tc-earth_nightmap_citylights.gif");
     LoadTextureImage("../../data/textures/boat.tga");
     LoadTextureImage("../../data/textures/fish.png");
 
     // Construímos a representação de objetos geométricos através de malhas de triângulos
-    ObjModel baitmodel("../../data/models/bait.obj");
-    ComputeNormals(&baitmodel);
-    BuildTrianglesAndAddToVirtualScene(&baitmodel);
-
-    ObjModel boatmodel("../../data/models/boat.obj");
-    ComputeNormals(&boatmodel);
-    BuildTrianglesAndAddToVirtualScene(&boatmodel);
-
     ObjModel terrainmodel("../../data/models/terrain.obj");
     ComputeNormals(&terrainmodel);
     BuildTrianglesAndAddToVirtualScene(&terrainmodel);
+
+    ObjModel treesmodel("../../data/models/trees.obj");
+    ComputeNormals(&treesmodel);
+    BuildTrianglesAndAddToVirtualScene(&treesmodel);
 
     ObjModel watermodel("../../data/models/water.obj");
     ComputeNormals(&watermodel);
     BuildTrianglesAndAddToVirtualScene(&watermodel);
 
+    ObjModel boatmodel("../../data/models/boat.obj");
+    ComputeNormals(&boatmodel);
+    BuildTrianglesAndAddToVirtualScene(&boatmodel);
+
     ObjModel fishmodel("../../data/models/fish.obj");
     ComputeNormals(&fishmodel);
     BuildTrianglesAndAddToVirtualScene(&fishmodel);
+
+    ObjModel baitmodel("../../data/models/bait.obj");
+    ComputeNormals(&baitmodel);
+    BuildTrianglesAndAddToVirtualScene(&baitmodel);
 }
 
 void UpdateCameras(glm::mat4& view, glm::vec4& camera_position, glm::mat4& projection)
@@ -1773,11 +1773,15 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
     glm::mat4 model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
     glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
     glUniform1i(g_object_id_uniform, MAP);
-    DrawVirtualObject("Landscape.005");
+    DrawVirtualObject("terrain");
 
-    // Desenhamos as árvores (agora com nomes únicos Tree_1, Tree_2, etc.)
-    for (int i = 1; i <= 500; i++) {
-        std::string tree_name = "Tree_" + std::to_string(i);
+    // Desenhamos as árvores
+    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, TREE);
+    DrawVirtualObject("Tree");
+    for (int i = 1; i <= 399; i++) {
+        std::string tree_name = "Tree." + std::to_string(i);
         if (g_VirtualScene.find(tree_name) != g_VirtualScene.end()) {
             model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
             glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
@@ -1786,7 +1790,14 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         }
     }
 
-  
+    // Desenhamos a água
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, WATER);
+    DrawVirtualObject("water");
+
     // Desenhamos o barco
     model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y - 1.7f, g_Boat.position.z) 
             * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
@@ -1854,14 +1865,6 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
             DrawVirtualObject("hook");
         }
     }
-    // Desenhamos a água
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
-    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, WATER);
-    DrawVirtualObject("Landscape_plane.002");
-
     
     // Mostrar estado atual do jogo
     if (g_ShowInfoText) {

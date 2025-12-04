@@ -39,7 +39,6 @@ uniform vec4 bbox_max;
 uniform vec3 material_kd;
 
 // Variáveis para acesso das imagens de textura
-uniform sampler2D EarthDayTexture;
 uniform sampler2D BoatTexture;
 uniform sampler2D FishTexture;
 
@@ -106,7 +105,8 @@ void main()
         Kd0 = material_kd;
     }
     else if (object_id == WATER) {
-        Kd0 = vec3(0.0, 0.3, 0.5);     
+        // Use material color from MTL file
+        Kd0 = material_kd;   
         color.a = 0.5; 
         Ks0 = vec3(0.8, 0.8, 0.8);
         q = 15.0;
