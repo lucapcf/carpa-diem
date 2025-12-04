@@ -479,6 +479,8 @@ int main(int argc, char* argv[])
     glCullFace(GL_BACK);
     glFrontFace(GL_CCW);
 
+
+
     // =====================================================================
     // Inicialização do jogo
     // =====================================================================
@@ -1784,12 +1786,7 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
         }
     }
 
-    // Desenhamos a água
-    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
-    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
-    glUniform1i(g_object_id_uniform, WATER);
-    DrawVirtualObject("Landscape_plane.002");
-
+  
     // Desenhamos o barco
     model = Matrix_Translate(g_Boat.position.x, g_Boat.position.y - 1.7f, g_Boat.position.z) 
             * Matrix_Rotate_Y(g_Boat.rotation_y + M_PI_2) // Ajuste de orientação do modelo
@@ -1857,6 +1854,14 @@ void RenderScene(GLFWwindow* window, const glm::mat4& view, const glm::mat4& pro
             DrawVirtualObject("hook");
         }
     }
+    // Desenhamos a água
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    model = Matrix_Translate(0.0f,-1.1f,0.0f) * Matrix_Scale(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    glUniformMatrix4fv(g_model_uniform, 1 , GL_FALSE , glm::value_ptr(model));
+    glUniform1i(g_object_id_uniform, WATER);
+    DrawVirtualObject("Landscape_plane.002");
+
     
     // Mostrar estado atual do jogo
     if (g_ShowInfoText) {

@@ -106,8 +106,10 @@ void main()
         Kd0 = material_kd;
     }
     else if (object_id == WATER) {
-        // Use material color from MTL file
-        Kd0 = material_kd;
+        Kd0 = vec3(0.0, 0.3, 0.5);     
+        color.a = 0.5; 
+        Ks0 = vec3(0.8, 0.8, 0.8);
+        q = 15.0;
     }
     else if (object_id == ROD) {
         Kd0 = vec3(0.6, 0.4, 0.2);      // Marrom claro
@@ -145,7 +147,8 @@ void main()
     //    suas distâncias para a câmera (desenhando primeiro objetos
     //    transparentes que estão mais longe da câmera).
     // Alpha default = 1 = 100% opaco = 0% transparente
-    color.a = 1;
+    if (object_id != WATER)
+        color.a = 1;
 
     // Cor final com correção gamma, considerando monitor sRGB.
     // Veja https://en.wikipedia.org/w/index.php?title=Gamma_correction&oldid=751281772#Windows.2C_Mac.2C_sRGB_and_TV.2Fvideo_standard_gammas
