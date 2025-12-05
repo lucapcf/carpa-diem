@@ -29,7 +29,7 @@ Utilizamos ferramentas de IA principalmente para auxiliar no processo de debuggi
 - **Composição de transformações**: O barco, vara de pesca e outros objetos utilizam múltiplas transformações encadeadas (translação, rotação, escala).
 
 #### 2. Sistemas de Câmera
-- **Câmera Look-At (Top-Down)**: Na fase de navegação, utilizamos uma câmera posicionada acima do cenário, olhando para baixo.
+- **Câmera Look-At (Top-Down)**: Na fase de navegação, utilizamos uma câmera ortográfica posicionada acima do cenário, olhando para baixo.
 - **Câmera Primeira Pessoa**: Na fase de pesca, a câmera é posicionada na perspectiva do jogador no barco, controlada pelo mouse.
 - **Câmera Livre (Debug)**: Implementação de câmera livre para debugging com movimento WASD e controle de orientação via mouse.
 
@@ -55,6 +55,32 @@ Utilizamos ferramentas de IA principalmente para auxiliar no processo de debuggi
 #### 7. Carregamento de Modelos
 - Utilização da biblioteca **tinyobjloader** para carregar modelos no formato Wavefront OBJ.
 - Suporte a arquivos MTL para cores de materiais.
+
+## Manual de Utilização
+
+### Controles
+
+| Tecla | Fase de Navegação | Fase de Pesca | Câmera Debug |
+|-------|-------------------|---------------|--------------|
+| **W** | Mover barco para frente | Puxar isca | Mover para frente |
+| **S** | Mover barco para trás | - | Mover para trás |
+| **A** | Rotacionar barco (esquerda) | - | Mover para esquerda |
+| **D** | Rotacionar barco (direita) | - | Mover para direita |
+| **Q** | - | - | Mover para baixo |
+| **E** | - | - | Mover para cima |
+| **Enter** | Iniciar pesca (em zona válida) | Voltar à navegação | - |
+| **C** | Alternar câmera debug | Alternar câmera debug | Voltar à câmera do jogo |
+| **ESC** | Sair do jogo | Sair do jogo | Sair do jogo |
+| **Mouse** | - | Olhar ao redor | Olhar ao redor |
+| **Clique Esquerdo** | - | Lançar isca | - |
+
+### Gameplay
+
+1. **Fase de Navegação**: Use WASD para navegar pelo lago com vista top-down. Evite colidir com os cubos. Posicione o barco em uma zona válida de pesca.
+
+2. **Fase de Pesca**: Pressione Enter para iniciar. Use o mouse para olhar ao redor. Clique esquerdo para lançar a isca. Use W para puxar a isca em direção ao barco. Capture o peixe tocando-o com a isca.
+
+3. **Fim de Jogo**: Colidir com um cubo encerra o jogo. Capturar o peixe retorna à fase de navegação.
 
 ## Manual de Utilização
 
